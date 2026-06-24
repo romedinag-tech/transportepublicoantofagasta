@@ -45,7 +45,8 @@ def load_pts(key):
     w=np.zeros(n)
     if len(df): _,zi=tree.query(df[['lat','lon']].values); [w.__setitem__(i,w[i]+1) for i in zi]
     return w
-A_est=load_pts('layer_jardines_infantiles_junji')+load_pts('layer_establecimientos_educacion_escolar')+load_pts('layer_establecimientos_de_educacion_superior')
+# atractor de estudio por NIVEL (se pondera por la mezcla etaria de los viajes de estudio, igual que p64)
+A_jar=load_pts('layer_jardines_infantiles_junji'); A_col=load_pts('layer_establecimientos_educacion_escolar'); A_sup=load_pts('layer_establecimientos_de_educacion_superior')
 SAL=np.zeros(n)
 try:
     import geopandas as gpd
@@ -69,20 +70,34 @@ if A_pop.sum()==0: A_pop=np.ones(n)
 
 # generación + distribución segmentada (transferida)
 # GENERACIÓN: población censal 2024 por zona × edad × tasas-edad del pool (método puro, sin tasa plana ni proxy)
-gen_zone=sum(popz[c].values*RATE_AGE[c] for c in RATE_AGE)
-red_tele=0.31*TELETRAB*0.5; gen_zone=gen_zone*(1-red_tele)
-viajes=float(gen_zone.sum()); O_pop=gen_zone/gen_zone.sum()
+# GA[zona,edad] = generación por zona y tramo etario (mantiene la desagregación por tipo de persona)
+ABK=list(RATE_AGE)                                               # orden de tramos
+red_tele=0.31*TELETRAB*0.5
+GA=popz[ABK].values.astype(float)*np.array([RATE_AGE[c] for c in ABK])[None,:]*(1-red_tele)
+gen_zone=GA.sum(1); viajes=float(GA.sum()); O_pop=gen_zone/gen_zone.sum()
 print('  generación (Censo 2024 zona×edad × tasas pool): %d viajes/día · %.2f v/p sobre %d hab urbanos'%(viajes,viajes/max(A_pop.sum(),1),int(A_pop.sum())))
-v=pd.read_parquet('EOD_PARQUET/viajes_analiticos.parquet',columns=['proposito_h','factor']); v['factor']=pd.to_numeric(v['factor'],errors='coerce'); v=v.dropna(subset=['factor'])
-psh=(v.groupby(v['proposito_h'].astype('string'))['factor'].sum()); psh=(psh/psh.sum()).to_dict()
-PMAP={'Trabajo':(A_trab,0.30),'Estudio':(A_est,0.45),'Salud':(SAL,0.22),'Compras':(A_com,0.40),'Trámites':(A_trab,0.40),'Comer':(A_com,0.50),'Recreación':(A_com+0.3*A_pop,0.40),'Volver a casa':(A_pop,0.30),'Buscar/Dejar':(A_pop+0.5*A_com,0.45)}
+# CUOTA DE PROPÓSITO POR EDAD del pool (forma transferible) -> orígenes por propósito según la estructura etaria de cada zona
+v=pd.read_parquet('EOD_PARQUET/viajes_analiticos.parquet',columns=['edad','proposito_h','factor'])
+v['factor']=pd.to_numeric(v['factor'],errors='coerce'); v['edad']=pd.to_numeric(v['edad'],errors='coerce'); v=v.dropna(subset=['factor','edad'])
+BANDS=[0,6,14,18,25,45,60,200]; v['ab']=pd.cut(v['edad'],BANDS,labels=ABK,right=False)
+SH=v.pivot_table(index='ab',columns=v['proposito_h'].astype('string'),values='factor',aggfunc='sum',observed=True).fillna(0)
+SH=SH.div(SH.sum(axis=1),axis=0).reindex(ABK)                    # cuota propósito|edad, en orden de tramos
+psh=(v.groupby(v['proposito_h'].astype('string'))['factor'].sum()); psh=(psh/psh.sum()).to_dict()  # agregada (insumos escalares del modal)
+# atractor de estudio ponderado por la mezcla etaria de los viajes de estudio (jardín 0-5 / colegio 6-17 / superior 18-24)
+st=v[v['proposito_h'].astype('string')=='Estudio'].groupby('ab',observed=True)['factor'].sum()
+wj,wc,ws=st.get('n_edad_0_5',0),st.get('n_edad_6_13',0)+st.get('n_edad_14_17',0),st.get('n_edad_18_24',0); tw=(wj+wc+ws) or 1
+A_est=(wj/tw)*A_jar+(wc/tw)*A_col+(ws/tw)*A_sup
+print('  estudio: peso jardín %.2f / colegio %.2f / superior %.2f (mezcla etaria del pool)'%(wj/tw,wc/tw,ws/tw))
+PMAP={'Trabajo':(A_trab,0.30),'Estudio':(A_est,0.45),'Salud':(SAL,0.22),'Compras':(A_com,0.40),'Trámites':(A_trab,0.40),'Comer':(A_com,0.50),'Recreación/Visitas':(A_com+0.3*A_pop,0.40),'Volver a casa':(A_pop,0.30),'Buscar/Dejar':(A_pop+0.5*A_com,0.45)}
 DEF=(A_com+0.3*A_pop,0.45)
 def gravity(O,A,beta):
     F=np.exp(-beta*DST)*np.maximum(A,1e-9)[None,:]; F=F/F.sum(1,keepdims=True); return O[:,None]*np.nan_to_num(F)
+# orígenes por propósito: O_pr[zona] = Σ_edad generación(zona,edad) × cuota(propósito|edad). Σ propósitos = generación total (nivel intacto)
+OPR={pr:(GA*SH[pr].values[None,:]).sum(1) for pr in SH.columns}
 def build_T(bscale):
     Tt=np.zeros((n,n))
-    for pr,sh in psh.items():
-        if sh>0: A,beta=PMAP.get(str(pr),DEF); Tt+=gravity(viajes*sh*O_pop,A,beta*bscale)
+    for pr,O in OPR.items():
+        if O.sum()>0: A,beta=PMAP.get(str(pr),DEF); Tt+=gravity(O,A,beta*bscale)
     return Tt
 # calibrar escala global de β (1 g.l.) para que la distancia media = TARGET_DIST (geometría lineal)
 lo,hi=0.08,1.0
