@@ -152,7 +152,8 @@ pairs.sort(reverse=True); pairs=pairs[:70]
 od=[{'o':p[1],'d':p[2],'olat':round(p[3],5),'olng':round(p[4],5),'dlat':round(p[5],5),'dlng':round(p[6],5),'n':round(p[0])} for p in pairs]
 kpi={'pob':POB,'viajes':round(viajes),'auto':round(Tauto.sum()/T.sum()*100),'pub':round(Tpub.sum()/T.sum()*100),'act':round(Tact.sum()/T.sum()*100),'dist':round(np.average(DST,weights=T),2),'av':round(AV,2)}
 GEO=json.load(open(GEOJSON,encoding='utf-8'))
-print('zonas %d · viajes %d · modal %d/%d/%d · od pares %d'%(n,kpi['viajes'],kpi['auto'],kpi['pub'],kpi['act'],len(od)))
+json.dump({'zonas':zonas,'od':od,'kpi':kpi},open('antofagasta_modelo_zona.json','w',encoding='utf-8'),ensure_ascii=False)
+print('zonas %d · viajes %d · modal %d/%d/%d · od pares %d -> antofagasta_modelo_zona.json'%(n,kpi['viajes'],kpi['auto'],kpi['pub'],kpi['act'],len(od)))
 
 # ---- HTML autocontenido ----
 DATA=json.dumps({'zonas':zonas,'od':od,'kpi':kpi},ensure_ascii=False)

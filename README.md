@@ -5,10 +5,22 @@ Dashboard interactivo de la movilidad urbana proyectada de Antofagasta al 2024, 
 👉 **[Ver el dashboard](https://romedinag-tech.github.io/antofagasta/)** (GitHub Pages) · o abrir `index.html` directamente.
 
 ## Qué muestra (105 zonas)
+Explorador con dos caras de la misma ciudad, conmutables desde el panel lateral:
+
+**Modelo EOD (proyección)**
 - **Generación** y **Atracción** de viajes por zona (coroplético).
-- **Intensidad por modo**: Auto / Público / Activa.
-- **Modo dominante** por zona.
+- **Partición modal** Auto / Público / Activa y **modo dominante** por zona.
 - **Flujos origen-destino** (líneas de deseo).
+
+**Censo 2024 (observado)** — desagregado por zona y cruzado por sexo / edad / modo:
+- **Demografía**: población, % mujeres, edad promedio, % 0-17 y % 60+.
+- **Movilidad al trabajo (P45)**: auto, público, activa, otros/personal.
+- **Trabajo y educación**: tasa de desocupación, escolaridad, % terciaria.
+- **Vivienda**: % departamentos, hacinamiento, tenencia propia, jefatura femenina.
+- **Conectividad y migración**: % internet, % inmigrantes, % pueblos originarios.
+- **Cruces de ciudad (Chart.js)**: pirámide etaria por sexo, modo al trabajo por sexo y por edad, **modelo EOD vs censo**, sectores económicos (CAENES) y educación/vivienda.
+
+**Mapa**: fondo conmutable **claro / oscuro / satélite** (Esri) y **tema claro/oscuro** de toda la interfaz (botón ☀/🌙, recuerda la preferencia).
 
 ## Cómo se estima (procedimiento de transferencia)
 1. **Generación**: población del **Censo 2024 por zona × edad** (unión espacial de las zonas censales a las 105 zonas EOD) × tasas de viaje por edad del pool. ≈860.000 viajes/día (≈2,2 v/p·día; ciudad joven). Corrección por teletrabajo (33%). La desagregación por edad se **conserva hasta la distribución**: cada zona reparte su generación entre propósitos con la cuota propósito-por-edad del pool, no con una mezcla única de ciudad → una zona joven origina más viajes de estudio, una zona activa más de trabajo (cuota de estudio en el origen ~ fracción joven de la zona, corr 0,99).
@@ -33,7 +45,14 @@ Como Antofagasta no tiene EOD, estos valores son atajos del estudio, no reglas d
 - El **transporte de personal minero** (≈18% del residual P45) no lo captura el modelo (estimado sobre ciudades no mineras).
 
 ## Reproducir
-`python proy_p73b_dashboard.py` regenera `index.html` (requiere los datos del proyecto EOD: parquet, catastro SII, geojson de zonas).
+Pipeline (requiere los datos del proyecto EOD: parquet del Censo 2024, catastro SII, geojson de zonas, parque INE):
+1. `python proy_p73c_pop_censo.py` · `python proy_p73e_zona_inputs.py` — insumos por zona (población censal, av/sexo/edad).
+2. `python proy_p73b_dashboard.py` — corre el modelo de 4 etapas → `antofagasta_modelo_zona.json`.
+3. `python proy_p73f_censo_zona.py` — extrae el Censo 2024 desagregado por zona y los cruces de ciudad → `antofagasta_censo.json`.
+4. `python proy_p73g_dashboard.py` — compone el explorador → `index.html`.
+5. `python proy_p73d_consistencia_zona.py` — valida modelo vs censo por zona (corr +0,66).
+
+Los `*.json` quedan versionados, así que el `index.html` es autocontenido (no necesita los parquet para verse).
 
 ---
 Análisis y desarrollo: Rodrigo Medina González · Universidad de Concepción. Modelo EOD × Censo 2024.
