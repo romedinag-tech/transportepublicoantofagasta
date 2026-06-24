@@ -7,7 +7,7 @@ import sys, re, glob, os, json; sys.stdout.reconfigure(encoding='utf-8')
 import pandas as pd, numpy as np, warnings; warnings.filterwarnings('ignore')
 from scipy.spatial import cKDTree
 CITY='Antofagasta'; POB=401096; TELETRAB=0.331; PCT60=0.144; AV=0.16
-TASA_PC=2.33      # tasas-edad del pool × estructura etaria censal de Antofagasta (joven: 34% en 25-44) — metodología §1
+# generación: población Censo 2024 por zona × edad × tasas-edad del pool (ver bloque abajo) — metodología §1, sin tasa plana
 # distancia media OBJETIVO: NO se imputa, se PREDICE con la relación transferible del pool
 # dist_media = 2,125 + 0,044·extensión_km  (regresión sobre las 18 EOD, R²=0,71). Se calcula abajo con la extensión real.
 GIS=r'C:\Users\Rodrigo\Análisis RMG\GIS Gran Concepción\Analisis uso de suelo Gran Concepción'; OTROS=GIS+r'\otros datos'
@@ -59,11 +59,19 @@ cat['m2']=pd.to_numeric(cat['sup_construida_total'],errors='coerce').fillna(0)
 cat['lat']=pd.to_numeric(cat['lat'],errors='coerce'); cat['lon']=pd.to_numeric(cat['lon'],errors='coerce'); cat=cat.dropna(subset=['lat','lon'])
 cat=cat[cat['lat'].between(la0,la1)&cat['lon'].between(lo0,lo1)]; _,zi=tree.query(cat[['lat','lon']].values); cat['zi']=zi
 m2_of=lambda u: cat[cat['destinoDescripcion'].isin(u)].groupby('zi')['m2'].sum().reindex(range(n)).fillna(0).values
-A_pop=m2_of(['HABITACIONAL']); A_trab=m2_of(['OFICINA','COMERCIO','INDUSTRIA','ADM. PUBLICA Y DEFENSA','BODEGA Y ALMACENAJE']); A_com=m2_of(['COMERCIO'])
+A_trab=m2_of(['OFICINA','COMERCIO','INDUSTRIA','ADM. PUBLICA Y DEFENSA','BODEGA Y ALMACENAJE']); A_com=m2_of(['COMERCIO'])
+# población REAL del Censo 2024 por zona EOD × edad (proy_p73c, unión espacial) — reemplaza el proxy de m²
+RATE_AGE={'n_edad_0_5':1.63,'n_edad_6_13':2.16,'n_edad_14_17':2.19,'n_edad_18_24':2.27,'n_edad_25_44':2.60,'n_edad_45_59':2.50,'n_edad_60_mas':2.05}
+popz=pd.read_csv('antofagasta_pop_zona.csv'); popz['zona']=popz['zona'].astype(str).map(nz); popz=popz.set_index('zona').reindex(ZN).fillna(0)
+A_pop=popz[list(RATE_AGE)].sum(1).values.astype(float)          # atractor de población = población censal por zona
 if A_pop.sum()==0: A_pop=np.ones(n)
 
 # generación + distribución segmentada (transferida)
-red_tele=0.31*TELETRAB*0.5; viajes=POB*TASA_PC*(1-red_tele); O_pop=A_pop/A_pop.sum()
+# GENERACIÓN: población censal 2024 por zona × edad × tasas-edad del pool (método puro, sin tasa plana ni proxy)
+gen_zone=sum(popz[c].values*RATE_AGE[c] for c in RATE_AGE)
+red_tele=0.31*TELETRAB*0.5; gen_zone=gen_zone*(1-red_tele)
+viajes=float(gen_zone.sum()); O_pop=gen_zone/gen_zone.sum()
+print('  generación (Censo 2024 zona×edad × tasas pool): %d viajes/día · %.2f v/p sobre %d hab urbanos'%(viajes,viajes/max(A_pop.sum(),1),int(A_pop.sum())))
 v=pd.read_parquet('EOD_PARQUET/viajes_analiticos.parquet',columns=['proposito_h','factor']); v['factor']=pd.to_numeric(v['factor'],errors='coerce'); v=v.dropna(subset=['factor'])
 psh=(v.groupby(v['proposito_h'].astype('string'))['factor'].sum()); psh=(psh/psh.sum()).to_dict()
 PMAP={'Trabajo':(A_trab,0.30),'Estudio':(A_est,0.45),'Salud':(SAL,0.22),'Compras':(A_com,0.40),'Trámites':(A_trab,0.40),'Comer':(A_com,0.50),'Recreación':(A_com+0.3*A_pop,0.40),'Volver a casa':(A_pop,0.30),'Buscar/Dejar':(A_pop+0.5*A_com,0.45)}
