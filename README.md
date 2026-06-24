@@ -13,7 +13,7 @@ Dashboard interactivo de la movilidad urbana proyectada de Antofagasta al 2024, 
 ## Cómo se estima (procedimiento de transferencia)
 1. **Generación**: tasas de viaje por edad del pool × estructura etaria censal de Antofagasta (≈2,33 v/p·día; ciudad joven). Corrección por teletrabajo (33%).
 2. **Atracción**: m² por uso del catastro SII de Antofagasta + capas de educación/salud.
-3. **Distribución**: gravedad segmentada por propósito con f(d) transferida; el coeficiente de impedancia β se re-calibra a la geometría **lineal** de Antofagasta (~31 km N-S, distancia media objetivo 5 km).
+3. **Distribución**: gravedad segmentada por propósito con f(d) transferida. El coeficiente de impedancia β **no se imputa**: la distancia media de Antofagasta se **predice** con una relación transferible estimada sobre las 18 EOD (distancia media ↔ extensión urbana, R²≈0,71), dando ≈3,56 km para su extensión de 32,7 km, y β se calibra a esa predicción. (Limitación: sin O-D medida, los flujos largos quedan repartidos en muchos pares chicos, por lo que el top por volumen sale corto.)
 4. **Partición modal**: logit anidado estimado sobre las 18 EOD (sin Antofagasta), aplicado con la disponibilidad de auto, demografía y tamaño urbano locales.
 
 ## Escenario y límites (honestidad)

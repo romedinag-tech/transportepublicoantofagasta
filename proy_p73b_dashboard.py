@@ -8,7 +8,8 @@ import pandas as pd, numpy as np, warnings; warnings.filterwarnings('ignore')
 from scipy.spatial import cKDTree
 CITY='Antofagasta'; POB=401096; TELETRAB=0.331; PCT60=0.144; AV=0.16
 TASA_PC=2.33      # tasas-edad del pool × estructura etaria censal de Antofagasta (joven: 34% en 25-44) — metodología §1
-TARGET_DIST=5.0   # distancia media objetivo (km) para calibrar β a la geometría LINEAL (31 km N-S); 1 g.l./ciudad
+# distancia media OBJETIVO: NO se imputa, se PREDICE con la relación transferible del pool
+# dist_media = 2,125 + 0,044·extensión_km  (regresión sobre las 18 EOD, R²=0,71). Se calcula abajo con la extensión real.
 GIS=r'C:\Users\Rodrigo\Análisis RMG\GIS Gran Concepción\Analisis uso de suelo Gran Concepción'; OTROS=GIS+r'\otros datos'
 GEOJSON=r'C:\Users\Rodrigo\Análisis RMG\eod-chile\data\geojson\Antofagasta.geojson'
 def nz(z): return re.sub(r'\.0$','',str(z).strip())
@@ -24,6 +25,9 @@ la0,la1,lo0,lo1=LAT.min()-.05,LAT.max()+.05,LON.min()-.05,LON.max()+.05; tree=cK
 DST=np.zeros((n,n))
 for i in range(n): DST[i]=hav(np.full(n,LON[i]),np.full(n,LAT[i]),LON,LAT)
 np.fill_diagonal(DST,0.4)
+EXT=float(hav(LON.min(),LAT.min(),LON.max(),LAT.max()))      # extensión (diagonal del bounding box) de Antofagasta
+TARGET_DIST=2.125+0.044*EXT                                  # distancia media PREDICHA (relación transferible pool, R²=0,71)
+print('extensión %.1f km -> distancia media predicha %.2f km (relación transferible, no imputada)'%(EXT,TARGET_DIST))
 
 def load_pts(key):
     subs=glob.glob(OTROS+'\\'+key+'*'); shp=None
