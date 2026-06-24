@@ -95,13 +95,27 @@ print('  β recalibrada ×%.3f -> distancia media %.2f km (objetivo %.1f)'%(BSCA
 
 # modal por celda (logit anidado transferido) -> volúmenes por modo
 C=json.load(open('proy_p33_coef.json')); par=np.array(C['par']); ST=C['ST']; COLS=C['COLS']; na=len(COLS)+1; lam=1/(1+np.exp(-par[2*na]))
-female,youth,elderly,trabajo,estudio=0.50,0.36,PCT60,psh.get('Trabajo',0.17),psh.get('Estudio',0.14); lsize=np.log(viajes)
-ba=par[:na]; bp=par[na:2*na]
-logd=np.log(np.clip(DST,0.2,None)); lz=(logd-ST['logd'][0])/ST['logd'][1]; avz=(AV-ST['av'][0])/ST['av'][1]; sz=(lsize-ST['lsize'][0])/ST['lsize'][1]; axs=avz*sz; o=np.ones((n,n))
-U=lambda b: b[0]*o+b[1]*lz+b[2]*avz+b[3]*female+b[4]*youth+b[5]*elderly+b[6]*trabajo+b[7]*estudio+b[8]*sz+b[9]*axs
+trabajo,estudio=psh.get('Trabajo',0.17),psh.get('Estudio',0.14); lsize=np.log(viajes); ba=par[:na]; bp=par[na:2*na]
+# INSUMOS POR ZONA DE ORIGEN: el logit recibe av, sexo y edad de la zona i (no constantes de ciudad)
+zin=pd.read_csv('antofagasta_zona_inputs.csv'); zin['zona']=zin['zona'].astype(str).map(nz); zin=zin.set_index('zona').reindex(ZN)
+fem_i=zin['female'].fillna(0.5).values[:,None]; you_i=zin['youth'].fillna(0.35).values[:,None]; eld_i=zin['elderly'].fillna(0.12).values[:,None]
+avz_i=((zin['av'].fillna(AV).values-ST['av'][0])/ST['av'][1])[:,None]
+logd=np.log(np.clip(DST,0.2,None)); lz=(logd-ST['logd'][0])/ST['logd'][1]; sz=(lsize-ST['lsize'][0])/ST['lsize'][1]; o=np.ones((n,n)); axs_i=avz_i*sz
+avz=(AV-ST['av'][0])/ST['av'][1]; axs=avz*sz                       # escalares de ciudad (para el chequeo por sexo)
+U=lambda b: b[0]*o+b[1]*lz+b[2]*avz_i+b[3]*fem_i+b[4]*you_i+b[5]*eld_i+b[6]*trabajo+b[7]*estudio+b[8]*sz+b[9]*axs_i
 a=U(ba)/lam; bb=U(bp)/lam; mx=np.maximum(a,bb); LS=mx+np.log(np.exp(a-mx)+np.exp(bb-mx)); logD=np.logaddexp(0,lam*LS); Pm=np.exp(lam*LS-logD)
 Pa=Pm*np.exp(a-LS); Pp=Pm*np.exp(bb-LS); Pw=np.exp(-logD)
 Tauto=T*Pa; Tpub=T*Pp; Tact=T*Pw
+
+# --- consistencia con Censo P45: modo del viaje al TRABAJO por sexo (simulación) ---
+Tw=gravity(viajes*psh.get('Trabajo',0.0)*O_pop,A_trab,0.30*BSCALE)
+def _modal_sex(fem):
+    U2=lambda b: b[0]*o+b[1]*lz+b[2]*avz+b[3]*fem+b[4]*0.08+b[5]*0.05+b[6]*1.0+b[7]*0.0+b[8]*sz+b[9]*axs   # trabajo=1, edad trabajadora
+    a2=U2(ba)/lam; b2=U2(bp)/lam; mx2=np.maximum(a2,b2); LS2=mx2+np.log(np.exp(a2-mx2)+np.exp(b2-mx2)); lD2=np.logaddexp(0,lam*LS2); Pm2=np.exp(lam*LS2-lD2)
+    return np.array([(Tw*Pm2*np.exp(a2-LS2)).sum(),(Tw*Pm2*np.exp(b2-LS2)).sum(),(Tw*np.exp(-lD2)).sum()])/Tw.sum()*100
+sH=_modal_sex(0.0); sM=_modal_sex(1.0)
+print('  [consistencia trabajo×sexo] SIM Hombre Auto/Pub/Activa %.0f/%.0f/%.0f | Mujer %.0f/%.0f/%.0f | brecha auto %.0f pp'%(sH[0],sH[1],sH[2],sM[0],sM[1],sM[2],sH[0]-sM[0]))
+print('  [consistencia] CENSO 2024 (renorm 3 modos): Hombre 37/52/11 | Mujer 26/61/13 | brecha auto 11 pp')
 
 # métricas por zona
 gen=T.sum(1); atr=T.sum(0); auto_z=Tauto.sum(1); pub_z=Tpub.sum(1); act_z=Tact.sum(1)
