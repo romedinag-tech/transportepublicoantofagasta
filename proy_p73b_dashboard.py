@@ -6,7 +6,8 @@ modo, modo dominante) + flujos O-D, y emite antofagasta_dashboard.html (coroplé
 import sys, re, glob, os, json; sys.stdout.reconfigure(encoding='utf-8')
 import pandas as pd, numpy as np, warnings; warnings.filterwarnings('ignore')
 from scipy.spatial import cKDTree
-CITY='Antofagasta'; POB=401096; TELETRAB=0.331; PCT60=0.144; AV=0.16
+CITY='Antofagasta'; POB=401096; TELETRAB=0.331; PCT60=0.144
+AV=72139/POB     # disponibilidad REAL: automóviles INE 2024 (Cuadro 4, comuna Antofagasta = 72.139) / población censal = 0,18 autos/persona
 # generación: población Censo 2024 por zona × edad × tasas-edad del pool (ver bloque abajo) — metodología §1, sin tasa plana
 # distancia media OBJETIVO: NO se imputa, se PREDICE con la relación transferible del pool
 # dist_media = 2,125 + 0,044·extensión_km  (regresión sobre las 18 EOD, R²=0,71). Se calcula abajo con la extensión real.
@@ -120,7 +121,7 @@ for i in range(n):
         if i!=j and T[i,j]>0: pairs.append((float(T[i,j]),ZN[i],ZN[j],float(LAT[i]),float(LON[i]),float(LAT[j]),float(LON[j])))
 pairs.sort(reverse=True); pairs=pairs[:70]
 od=[{'o':p[1],'d':p[2],'olat':round(p[3],5),'olng':round(p[4],5),'dlat':round(p[5],5),'dlng':round(p[6],5),'n':round(p[0])} for p in pairs]
-kpi={'pob':POB,'viajes':round(viajes),'auto':round(Tauto.sum()/T.sum()*100),'pub':round(Tpub.sum()/T.sum()*100),'act':round(Tact.sum()/T.sum()*100),'dist':round(np.average(DST,weights=T),2),'av':AV}
+kpi={'pob':POB,'viajes':round(viajes),'auto':round(Tauto.sum()/T.sum()*100),'pub':round(Tpub.sum()/T.sum()*100),'act':round(Tact.sum()/T.sum()*100),'dist':round(np.average(DST,weights=T),2),'av':round(AV,2)}
 GEO=json.load(open(GEOJSON,encoding='utf-8'))
 print('zonas %d · viajes %d · modal %d/%d/%d · od pares %d'%(n,kpi['viajes'],kpi['auto'],kpi['pub'],kpi['act'],len(od)))
 
@@ -201,7 +202,7 @@ function drawOD(){
 var bar=document.getElementById("bar");
 VIEWS.forEach(function(x){var b=document.createElement("button");b.textContent=x[1];b.onclick=function(){view=x[0];[].forEach.call(bar.children,function(c){c.classList.remove("on")});b.classList.add("on");draw()};bar.appendChild(b)});
 bar.children[0].classList.add("on");
-document.getElementById("note").innerHTML="<b>Proyección sin EOD</b> (procedimiento de transferencia): el comportamiento viene del pool de 18 EOD; el nivel se ancla al Censo 2024 (P45 trabajo: auto 26%/TP 46%) y al uso de suelo SII de Antofagasta. <b>Escenario</b> con disponibilidad de auto av="+k.av+" autos/persona. Aproximaciones: población por zona ≈ m² residencial; demografía/av representativas; el transporte de personal minero (≈18% del P45) no lo captura el modelo. Sin EOD propia no hay validación interna.";
+document.getElementById("note").innerHTML="<b>Proyección sin EOD</b> (procedimiento de transferencia): el comportamiento viene del pool de 18 EOD, y el nivel se ancla a DATOS LOCALES reales — Censo 2024 (población por zona × edad; P45 trabajo auto 26%/TP 46%), parque INE 2024 (disponibilidad de auto av="+k.av+") y uso de suelo SII. Supuestos provisionales: la distancia media (y β) se predice con una relación auxiliar (no hay O-D medida) y el factor de teletrabajo. El transporte de personal minero (≈18% del P45) no lo captura el modelo. Sin EOD propia no hay validación interna.";
 draw();
 </script></body></html>'''
 html=html.replace('__DATA__',DATA).replace('__GEO__',GEOS)
