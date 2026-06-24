@@ -13,13 +13,21 @@ Dashboard interactivo de la movilidad urbana proyectada de Antofagasta al 2024, 
 ## Cómo se estima (procedimiento de transferencia)
 1. **Generación**: tasas de viaje por edad del pool × estructura etaria censal de Antofagasta (≈2,33 v/p·día; ciudad joven). Corrección por teletrabajo (33%).
 2. **Atracción**: m² por uso del catastro SII de Antofagasta + capas de educación/salud.
-3. **Distribución**: gravedad segmentada por propósito con f(d) transferida. El coeficiente de impedancia β **no se imputa**: la distancia media de Antofagasta se **predice** con una relación transferible estimada sobre las 18 EOD (distancia media ↔ extensión urbana, R²≈0,71), dando ≈3,56 km para su extensión de 32,7 km, y β se calibra a esa predicción. (Limitación: sin O-D medida, los flujos largos quedan repartidos en muchos pares chicos, por lo que el top por volumen sale corto.)
+3. **Distribución**: gravedad segmentada por propósito con f(d) transferida; el coeficiente β se calibra a la distancia media de la ciudad (que Antofagasta no tiene medida → ver supuestos abajo).
 4. **Partición modal**: logit anidado estimado sobre las 18 EOD (sin Antofagasta), aplicado con la disponibilidad de auto, demografía y tamaño urbano locales.
 
-## Escenario y límites (honestidad)
-- Es una **proyección sin validación interna** (no hay EOD de Antofagasta): se ancla al Censo 2024 (P45 trabajo: auto 26% / TP 46%).
-- Escenario con disponibilidad de auto av = 0,16 autos/persona.
-- Aproximaciones: población por zona ≈ m² residencial; demografía/av representativas.
+> La **metodología validada** (cada valor demostrado en la investigación) vive aparte, en `METODOLOGIA.md` del proyecto EOD. Lo de abajo NO es metodología: son decisiones específicas y provisionales para estudiar Antofagasta sin EOD.
+
+## Supuestos de ESTE estudio (provisionales)
+Como Antofagasta no tiene EOD, estos valores son atajos del estudio, no reglas del método. Con una EOD se reemplazan por dato:
+- **β / distancia media**: sin O-D medida, la distancia media se predijo con una relación auxiliar dist↔extensión ajustada sobre las 18 EOD (R²≈0,71) → ≈3,56 km, y β se calibró a ella. Es un atajo de un solo análisis.
+- **Disponibilidad de auto**: av = 0,16 autos/persona (representativa; idealmente parque INE).
+- **Población por zona** ≈ m² residencial (proxy; idealmente censo por zona).
+- **Demografía**: estructura etaria del censo comunal aplicada de forma uniforme.
+
+## Límites (honestidad)
+- **Proyección sin validación interna** (no hay EOD de Antofagasta): se ancla al Censo 2024 (P45 trabajo: auto 26% / TP 46%).
+- Sin O-D medida, los flujos largos quedan repartidos en muchos pares chicos → el top por volumen sale corto (los commutes norte→centro existen, pero difusos).
 - El **transporte de personal minero** (≈18% del residual P45) no lo captura el modelo (estimado sobre ciudades no mineras).
 
 ## Reproducir
