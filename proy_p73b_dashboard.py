@@ -132,6 +132,14 @@ sH=_modal_sex(0.0); sM=_modal_sex(1.0)
 print('  [consistencia trabajo×sexo] SIM Hombre Auto/Pub/Activa %.0f/%.0f/%.0f | Mujer %.0f/%.0f/%.0f | brecha auto %.0f pp'%(sH[0],sH[1],sH[2],sM[0],sM[1],sM[2],sH[0]-sM[0]))
 print('  [consistencia] CENSO 2024 (renorm 3 modos): Hombre 37/52/11 | Mujer 26/61/13 | brecha auto 11 pp')
 
+# --- partición modal LABORAL por zona de ORIGEN (para bondad de ajuste vs Censo P45) ---
+youW=np.full((n,1),0.08); eldW=np.full((n,1),0.05)            # estructura de edad trabajadora
+Uw=lambda b: b[0]*o+b[1]*lz+b[2]*avz_i+b[3]*fem_i+b[4]*youW+b[5]*eldW+b[6]*1.0+b[7]*0.0+b[8]*sz+b[9]*axs_i
+aw=Uw(ba)/lam; bw=Uw(bp)/lam; mxw=np.maximum(aw,bw); LSw=mxw+np.log(np.exp(aw-mxw)+np.exp(bw-mxw)); lDw=np.logaddexp(0,lam*LSw); Pmw=np.exp(lam*LSw-lDw)
+PaW=Pmw*np.exp(aw-LSw); PpW=Pmw*np.exp(bw-LSw); PwW=np.exp(-lDw)
+TwA=(Tw*PaW).sum(1); TwP=(Tw*PpW).sum(1); TwAc=(Tw*PwW).sum(1); wtot=(TwA+TwP+TwAc); wtot[wtot==0]=1
+w_auto=TwA/wtot*100; w_pub=TwP/wtot*100; w_act=TwAc/wtot*100
+
 # métricas por zona
 gen=T.sum(1); atr=T.sum(0); auto_z=Tauto.sum(1); pub_z=Tpub.sum(1); act_z=Tact.sum(1)
 tot=gen.copy(); tot[tot==0]=1
@@ -142,7 +150,8 @@ for i in range(n):
     zonas.append({'zona':ZN[i],'lat':round(float(LAT[i]),5),'lng':round(float(LON[i]),5),
         'gen':round(float(gen[i])),'atr':round(float(atr[i])),
         'auto':round(float(auto_z[i])),'pub':round(float(pub_z[i])),'act':round(float(act_z[i])),
-        'dom':modos[int(np.argmax(sh))],'sh':[round(x) for x in sh]})
+        'dom':modos[int(np.argmax(sh))],'sh':[round(x) for x in sh],
+        'w_auto':round(float(w_auto[i]),1),'w_pub':round(float(w_pub[i]),1),'w_act':round(float(w_act[i]),1)})
 # flujos OD top
 pairs=[]
 for i in range(n):

@@ -70,6 +70,12 @@ for z in ZN:
       'c_inmig':round(r['n_inmigrantes']/per*100,1) if per==per else None,
       'c_orig':round(r['n_pueblos_orig']/per*100,1) if per==per else None,
     }
+    # cuota modal LABORAL a 3 modos comparables (auto/público/activa), para bondad de ajuste vs modelo
+    m3=r['n_transporte_auto']+r['n_transporte_publico']+act
+    Z[nz(z)]['cw_auto']=round(r['n_transporte_auto']/m3*100,1) if m3>0 else None
+    Z[nz(z)]['cw_pub']=round(r['n_transporte_publico']/m3*100,1) if m3>0 else None
+    Z[nz(z)]['cw_act']=round(act/m3*100,1) if m3>0 else None
+    Z[nz(z)]['cw_n']=int(m3)
 
 METRICS=[
  ['c_pob','Población','Demografía','hab','#6b7280',False],

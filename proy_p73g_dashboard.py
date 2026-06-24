@@ -50,6 +50,10 @@ h1.hero-title{margin:0;font-size:21px;font-weight:700}.hero-desc{opacity:.82;fon
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:13px 15px 10px;box-shadow:var(--shadow)}
 .card h3{margin:0 0 2px;font-size:13.5px;color:var(--ink2)}.card p.cap{margin:0 0 8px;font-size:11.5px;color:var(--mut)}
+.r2{float:right;font-size:11.5px;font-weight:700;color:#fff;background:var(--navy2);border-radius:6px;padding:1px 8px}
+.fitkpis{display:flex;gap:10px;flex-wrap:wrap;margin:2px 0 12px}
+.fitkpi{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:7px 13px;font-size:11.5px;color:var(--mut);box-shadow:var(--shadow)}
+.fitkpi b{font-size:16px;color:var(--navy);font-weight:700}.fitkpi .md{display:block;color:var(--mut2);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em}
 .card .cv{position:relative;height:230px}
 .note{margin:16px 22px;padding:11px 14px;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--or);border-radius:8px;font-size:12px;color:var(--mut);line-height:1.6}
 footer{padding:16px 22px;border-top:1px solid var(--line);font-size:11.5px;color:var(--mut)}footer b{color:var(--navy2)}
@@ -75,6 +79,14 @@ footer{padding:16px 22px;border-top:1px solid var(--line);font-size:11.5px;color
 <div class="card"><h3>Modelo EOD vs Censo — partición modal</h3><p class="cap">Cuota modal proyectada vs observada al trabajo (3 modos)</p><div class="cv"><canvas id="ch-cmp"></canvas></div></div>
 <div class="card"><h3>Sectores económicos (CAENES)</h3><p class="cap">Ocupados por rama · perfil minero-portuario</p><div class="cv"><canvas id="ch-sec"></canvas></div></div>
 <div class="card"><h3>Educación y vivienda</h3><p class="cap">Nivel educativo alcanzado y tipo de vivienda</p><div class="cv"><canvas id="ch-ev"></canvas></div></div>
+</div>
+<h2>Bondad de ajuste — partición modal laboral (modelo vs Censo P45)</h2>
+<p class="lead">Para cada modo, la cuota modal <b>laboral</b> predicha por el modelo (eje Y) frente a la observada en el Censo P45 (eje X), zona por zona. La línea punteada es el ajuste perfecto 1:1; el <b>R²</b> mide qué tan cerca caen los puntos de esa recta (1 = perfecto; puede ser negativo si el sesgo domina). Se incluyen las zonas con ≥30 trabajadores con modo declarado.</p>
+<div class="fitkpis" id="fitkpis"></div>
+<div class="grid">
+<div class="card"><h3>Auto <span class="r2" id="r2-auto">·</span></h3><p class="cap">cuota laboral de auto por zona · modelo vs censo</p><div class="cv"><canvas id="fit-auto"></canvas></div></div>
+<div class="card"><h3>Público <span class="r2" id="r2-pub">·</span></h3><p class="cap">cuota laboral de público por zona · modelo vs censo</p><div class="cv"><canvas id="fit-pub"></canvas></div></div>
+<div class="card"><h3>Activa <span class="r2" id="r2-act">·</span></h3><p class="cap">cuota laboral activa por zona · modelo vs censo</p><div class="cv"><canvas id="fit-act"></canvas></div></div>
 </div></div>
 <footer>Proyección sin EOD propia: comportamiento transferido del pool de 18 EOD; nivel anclado a Censo 2024, parque INE y SII. El censo es <b>observado</b>; el modelo es <b>escenario condicional</b>. El transporte de personal minero (modo «otros», ≈18% del P45) no lo captura el modelo. · <b>R. Medina G.</b></footer>
 <script>
@@ -230,6 +242,36 @@ function buildCharts(){
    datasets:[{data:[ed.Primaria,ed.Secundaria,ed.Terciaria,vv.Casa,vv.Departamento],
     backgroundColor:['#94a3b8','#64748b','#2563eb','#16a34a','#9333ea']}]},
    options:baseOpts(false,{plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:tickc(),font:{size:10}}},y:{grid:{color:gridc()},ticks:{color:tickc(),font:{size:10}}}}})}));
+ buildFit();
+}
+/* ---- bondad de ajuste: modelo vs censo, partición modal laboral por zona ---- */
+function r2of(P){ // P:[{x:censo,y:modelo}] · R² 1:1 = 1 - SSres/SStot (obs=censo)
+ var n=P.length; if(n<3)return null; var mo=0; P.forEach(function(p){mo+=p.x}); mo/=n;
+ var ssr=0,sst=0; P.forEach(function(p){ssr+=(p.x-p.y)*(p.x-p.y); sst+=(p.x-mo)*(p.x-mo)});
+ return sst>0?1-ssr/sst:null;}
+function corr(P){var n=P.length;if(n<3)return null;var mx=0,my=0;P.forEach(function(p){mx+=p.x;my+=p.y});mx/=n;my/=n;
+ var sxy=0,sx=0,sy=0;P.forEach(function(p){sxy+=(p.x-mx)*(p.y-my);sx+=(p.x-mx)*(p.x-mx);sy+=(p.y-my)*(p.y-my)});
+ return (sx>0&&sy>0)?sxy/Math.sqrt(sx*sy):null;}
+function pairs(km,kc){return ZL.filter(function(z){return z.cw_n>=30&&typeof z[km]=="number"&&typeof z[kc]=="number"})
+   .map(function(z){return {x:z[kc],y:z[km],z:z.zona}})}
+function fitChart(cv,P,col,r2id){
+ var r2=r2of(P),rr=corr(P),mxv=0;P.forEach(function(p){mxv=Math.max(mxv,p.x,p.y)});var lim=Math.min(100,Math.ceil((mxv+5)/10)*10);
+ var badge=document.getElementById(r2id);if(badge)badge.textContent='R² '+(r2==null?'—':r2.toFixed(2));
+ charts.push(new Chart(cv,{data:{datasets:[
+   {type:'scatter',label:'zonas',data:P,backgroundColor:col,pointRadius:3.5,pointHoverRadius:5},
+   {type:'line',label:'1:1',data:[{x:0,y:0},{x:lim,y:lim}],borderColor:isDark()?'#6e7681':'#9aa7b3',borderDash:[5,4],borderWidth:1.3,pointRadius:0,fill:false}]},
+   options:baseOpts(false,{plugins:{legend:{display:false},tooltip:{callbacks:{label:function(t){return t.raw.z?('Zona '+t.raw.z+': censo '+t.raw.x.toFixed(0)+'% · modelo '+t.raw.y.toFixed(0)+'%'):''}}}},
+    scales:{x:{type:'linear',min:0,max:lim,title:{display:true,text:'Censo P45 (observado) %',color:tickc(),font:{size:10}},grid:{color:gridc()},ticks:{color:tickc(),font:{size:10}}},
+            y:{type:'linear',min:0,max:lim,title:{display:true,text:'Modelo EOD (predicho) %',color:tickc(),font:{size:10}},grid:{color:gridc()},ticks:{color:tickc(),font:{size:10}}}}})}));
+ return {r2:r2,r:rr,n:P.length};
+}
+function buildFit(){
+ var fa=fitChart('fit-auto',pairs('w_auto','cw_auto'),'#c0392b','r2-auto');
+ var fp=fitChart('fit-pub',pairs('w_pub','cw_pub'),'#185fa5','r2-pub');
+ var fc=fitChart('fit-act',pairs('w_act','cw_act'),'#1e8449','r2-act');
+ document.getElementById('fitkpis').innerHTML=[['Auto',fa],['Público',fp],['Activa',fc]].map(function(x){
+   return '<div class="fitkpi"><span class="md">'+x[0]+'</span><b>R² '+(x[1].r2==null?'—':x[1].r2.toFixed(2))+'</b> · r '+(x[1].r==null?'—':x[1].r.toFixed(2))+' · n='+x[1].n+'</div>'}).join('')+
+   '<div class="fitkpi" style="border-left:3px solid var(--or)"><span class="md">Lectura</span>el patrón espacial correlaciona (r), pero el sesgo de nivel del auto baja su R² 1:1</div>';
 }
 
 /* ---- tema ---- */

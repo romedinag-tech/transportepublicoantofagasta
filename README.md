@@ -20,6 +20,10 @@ Explorador con dos caras de la misma ciudad, conmutables desde el panel lateral:
 - **Conectividad y migración**: % internet, % inmigrantes, % pueblos originarios.
 - **Cruces de ciudad (Chart.js)**: pirámide etaria por sexo, modo al trabajo por sexo y por edad, **modelo EOD vs censo**, sectores económicos (CAENES) y educación/vivienda.
 
+**Bondad de ajuste** — partición modal laboral, modelo vs Censo P45, por zona:
+- Un dispersograma por modo (auto / público / activa): cuota **predicha** (Y) vs **observada** (X), con la recta 1:1 y el **R²** como indicador de ajuste.
+- R² 1:1 ≈ −0,10 (auto) / −0,50 (público) / 0,22 (activa) con correlación espacial r ≈ 0,69 / 0,45 / 0,53 (n=70 zonas). Lectura honesta: el modelo capta el **patrón espacial** (r), pero no el **nivel** — Antofagasta usa más transporte público del que reproduce un modelo transferido de ciudades no mineras, lo que deprime el R² 1:1 del auto/público. El R² es deliberadamente el del ajuste 1:1 (no la r²), para no esconder el sesgo de nivel.
+
 **Mapa**: fondo conmutable **claro / oscuro / satélite** (Esri) y **tema claro/oscuro** de toda la interfaz (botón ☀/🌙, recuerda la preferencia).
 
 ## Cómo se estima (procedimiento de transferencia)
