@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=52`).then(r=>r.json());
-const BUILD = "afta-v3";
+const J = n => fetch(`data/${n}?v=53`).then(r=>r.json());
+const BUILD = "afta-v4";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -14,7 +14,7 @@ let VFREQ=null, VTREND=null, curVar=null, lastFitScope=null, TLIN={}, PESP={stop
 let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"live", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", cmpA:null, cmpB:null};
 let chart, csChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = ""; // Antofagasta: sin captura GTFS-RT aún → modo vivo deshabilitado (degrada)
-const MAP_MODES = [["live","En vivo"],["cover","Cobertura"],["trans","Transbordo"],["wait","Espera"],["conges","Congestión"],["bunch","Bunching"],["det","Detenciones"],["salud","Salud"],["edu","Educación"],["nse","NSE"]];
+const MAP_MODES = [["live","En vivo"],["cover","Cobertura"],["trans","Transbordo"],["wait","Espera"],["conges","Congestión"],["bunch","Bunching"],["det","Detenciones"],["term","Terminales"],["salud","Salud"],["edu","Educación"],["nse","NSE"]];
 const PEAK_H = [7,8,9,17,18,19];
 
 const CS_DIAS = [["L","Laboral"],["S","Sábado"],["D","Domingo"]];
@@ -434,6 +434,27 @@ function drawDetenciones(){
   });
   setCoverLegend("det");
 }
+function drawTerminales(){
+  // Red de terminales y cabeceras (ubicación + flota por línea). Capa propia, sin congestión.
+  if(!coverLayer) return; coverLayer.clearLayers();
+  let terms = ((TERM&&TERM.terminales)||[]).filter(t=>inComuna(t.la,t.lo));
+  if(state.linea!=="TODAS") terms = terms.filter(t=>(t.lineas||[]).some(l=>String(l.linea)===String(state.linea)));
+  if(!terms.length){ setCoverLegend("term"); return; }
+  const mxB = Math.max(...terms.map(t=>t.buses||1));
+  terms.forEach(t=>{
+    const r = 9 + 22*Math.sqrt((t.buses||1)/mxB);
+    // anillo proporcional a la flota que opera desde el terminal
+    L.circleMarker([t.la,t.lo],{renderer:coverCanvas,radius:r,weight:1.5,color:"#22d3ee",fillColor:"#22d3ee",fillOpacity:.15})
+      .addTo(coverLayer);
+    const dom=(t.lineas&&t.lineas[0])?t.lineas[0].linea:"T";
+    const rows=(t.lineas||[]).map(l=>`<tr><td style="padding:0 8px 0 0">Línea ${l.linea}</td><td style="text-align:right"><b>${l.buses}</b> buses</td></tr>`).join("");
+    const icon=L.divIcon({className:"term-ic",html:`<div class="term-box">▣ ${dom}</div>`,iconSize:[36,18],iconAnchor:[18,9]});
+    L.marker([t.la,t.lo],{icon,zIndexOffset:600}).bindTooltip(
+      `<b>Terminal / cabecera · ${t.comuna||""}</b><br>${t.buses} buses · ${t.n_lineas} línea${t.n_lineas===1?"":"s"} · intensidad ${t.intens}<br>Flota por línea:<table style="margin-top:3px">${rows}</table>`,
+      {sticky:true,direction:"top"}).addTo(coverLayer);
+  });
+  setCoverLegend("term");
+}
 function drawBunching(){
   if(!coverLayer) return; coverLayer.clearLayers();
   const per = RFREQ && RFREQ.per && RFREQ.per[state.periodo];
@@ -458,6 +479,7 @@ function drawCoverage(mode){
   if(mode==="conges"){ drawCongestion(); return; }
   if(mode==="bunch"){ drawBunching(); return; }
   if(mode==="det"){ drawDetenciones(); return; }
+  if(mode==="term"){ drawTerminales(); return; }
   if(!coverLayer) return; coverLayer.clearLayers();
   if(!COB) return;
   COB.features.forEach(f=>{
@@ -540,6 +562,7 @@ function setCoverLegend(mode){
     : mode==="conges" ? [`Velocidad efectiva · ${sentidoLbl(state.sentido)} · ${periodoLbl(state.periodo)} (km/h)`,`<span class="grad" style="background:linear-gradient(90deg,hsl(0,75%,50%),hsl(60,75%,50%),hsl(120,75%,50%))"></span>`,"<span class='lbls'><i>≤10</i><i>20</i><i>30+</i></span><span class='par'>incluye el tiempo detenido en tránsito</span>"]
     : mode==="bunch" ? [`Apelotonamiento · ${periodoLbl(state.periodo)} (CV de headways)`,`<span class="grad" style="background:linear-gradient(90deg,hsl(120,75%,50%),hsl(60,75%,50%),hsl(0,75%,50%))"></span>`,"<span class='lbls'><i>regular</i><i></i><i>apelotonado</i></span><span class='par'>CV alto = buses pegados unos a otros</span>"]
     : mode==="det" ? ["Congestión: nodos de demora (sin terminales)",`<span class="grad" style="background:linear-gradient(90deg,hsl(45,85%,52%),hsl(0,85%,52%))"></span>`,"<span class='lbls'><i>menor</i><i>mayor</i></span><span class='par'><b style='color:#22d3ee'>▣</b> terminal · flota por línea al pasar</span>"]
+    : mode==="term" ? ["Red de terminales y cabeceras",`<span style="display:inline-block;width:14px;height:14px;border:1.5px solid #22d3ee;background:rgba(34,211,238,.15);border-radius:50%;vertical-align:middle"></span>`,"<span class='par'><b style='color:#22d3ee'>▣</b> terminal · tamaño del anillo = flota que opera desde ahí · hover = líneas</span>"]
     : ["NSE (avalúo CLP/m²)",`<span class="grad" style="background:linear-gradient(90deg,hsl(205,68%,52%),hsl(118,68%,52%),hsl(30,68%,52%))"></span>`,"<span class='lbls'><i>bajo</i><i></i><i>alto</i></span>"];
   coverLegend = L.control({position:"bottomleft"});
   coverLegend.onAdd = ()=>{ const d=L.DomUtil.create("div","speedleg"); d.innerHTML=`<b>${txt[0]}</b>${txt[1]}${txt[2]}`; return d; };
@@ -634,7 +657,7 @@ function renderMapa(){
     const b=$("live-count"), R=(COB&&COB.resumen)||{};
     const M=state.mapMode;
     const titulo = {cover:"Cobertura: destinos alcanzables",trans:"Dependencia de transbordo",wait:`Espera hacia destinos · ${periodoLbl(state.periodo)}`,
-      conges:`Velocidad efectiva por arco · ${periodoLbl(state.periodo)}`, bunch:`Apelotonamiento (bunching) · ${periodoLbl(state.periodo)}`, det:"Congestión y terminales",
+      conges:`Velocidad efectiva por arco · ${periodoLbl(state.periodo)}`, bunch:`Apelotonamiento (bunching) · ${periodoLbl(state.periodo)}`, det:"Congestión y terminales", term:"Red de terminales y cabeceras",
       salud:"Accesibilidad a salud en transporte",edu:"Accesibilidad a educación en transporte",nse:"Nivel socioeconómico (avalúo)"}[M];
     // resumen sólo a nivel sistema (COB.resumen es de todo el GC); en comuna, etiqueta de ámbito
     const badgeSys = {cover:`${R.dacc_medio??"—"}% de la demanda-destino EOD es alcanzable (≤1 transbordo) · destinos dimensionados por viajes`,
@@ -696,6 +719,9 @@ function renderNarrative(){
     txt=`<b>Bunching</b>: regularidad de los intervalos entre buses (CV de los headways) medida en puntos de la red, en <b>${periodoLbl(per)}</b>. Verde = buses parejos; rojo = <b>apelotonados</b> (vienen pegados y luego un hueco largo) → peor espera efectiva aguas abajo. Es la huella de la congestión sobre la frecuencia.`;
   } else if(M==="det"){
     txt=`<b>Detenciones</b>: nodos donde los buses pasan más tiempo detenidos, <b>excluyendo los terminales</b> (que distorsionan por la espera de cabecera). Los círculos ámbar→rojo son cuellos de demora en marcha; las cajas <b>▣</b> cyan son terminales, con su flota por línea al pasar el cursor.`;
+  } else if(M==="term"){
+    const nt=((TERM&&TERM.terminales)||[]).filter(t=>inComuna(t.la,t.lo)).length;
+    txt=`<b>Red de terminales y cabeceras</b>: ${nt} terminal${nt===1?"":"es"} detectado${nt===1?"":"s"} por intensidad de detención (buses que reposan en cabecera: muchos minutos por bus). El <b>anillo</b> es proporcional a la <b>flota que opera desde ahí</b> y la caja <b>▣</b> marca la línea dominante; al pasar el cursor se ve la flota por línea. Se concentran en los extremos del eje (norte: La Chimba; sur: Coloso / Jardines del Sur).`;
   } else if(M==="salud"||M==="edu"){
     const v=scopeWavg(p=>M==="salud"?p.salud:p.edu);
     txt=`Tiempo de viaje en transporte público desde cada manzana al ${M==="salud"?"<b>centro de salud</b>":"<b>establecimiento educacional</b>"} más cercano (caminata + espera + bus). ${v!=null?`Mediana ${amb}: <b>${v.toFixed(0)} min</b>. `:""}Verde = cerca en tiempo real de viaje; rojo = lejos.`;
@@ -1238,7 +1264,7 @@ function renderEvolucion(){
     J("congestion_red.json").then(d=>{ CONGRED=d; if(state.mapMode==="conges"||state.mapMode==="bunch") renderMapa(); }).catch(()=>{});
     J("red_freq.json").then(d=>{ RFREQ=d; if(state.mapMode==="bunch") renderMapa(); }).catch(()=>{});
     J("detenciones.json").then(d=>{ DET2=d; if(state.mapMode==="det") renderMapa(); }).catch(()=>{});
-    J("terminales.json").then(d=>{ TERM=d; if(state.mapMode==="det") renderMapa(); }).catch(()=>{});
+    J("terminales.json").then(d=>{ TERM=d; if(state.mapMode==="det"||state.mapMode==="term") renderMapa(); }).catch(()=>{});
     J("destinos_principales.json").then(d=>{ DEST=d; if(state.mapMode==="cover"||state.mapMode==="trans") renderMapa(); }).catch(()=>{});
     J("paraderos_espera.json").then(d=>{ PESP=d; if(state.mapMode==="wait") renderMapa(); }).catch(()=>{});
     J("empresa_stats.json").then(d=>{ EMPR=d; renderEmpresas(); }).catch(()=>{});
