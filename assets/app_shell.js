@@ -4,14 +4,14 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=53`).then(r=>r.json());
-const BUILD = "afta-v4";
+const J = n => fetch(`data/${n}?v=54`).then(r=>r.json());
+const BUILD = "afta-v5";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
 let EMPR=[], MESH=[], DOWH=[], DET2=[], TERM={terminales:[]}, DEST={destinos:[]}, REC={top:[],lentos:[],reg:[],corr:[]}, EVOL={meses:[],comunas:{}};
 let VFREQ=null, VTREND=null, curVar=null, lastFitScope=null, TLIN={}, PESP={stops:[]};
-let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"live", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", cmpA:null, cmpB:null};
+let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"conges", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", cmpA:null, cmpB:null};
 let chart, csChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = ""; // Antofagasta: sin captura GTFS-RT aún → modo vivo deshabilitado (degrada)
 const MAP_MODES = [["live","En vivo"],["cover","Cobertura"],["trans","Transbordo"],["wait","Espera"],["conges","Congestión"],["bunch","Bunching"],["det","Detenciones"],["term","Terminales"],["salud","Salud"],["edu","Educación"],["nse","NSE"]];
@@ -1251,9 +1251,14 @@ function renderEvolucion(){
     if(T.hasta){ const pe=$("periodo-pill"); if(pe) pe.textContent = "datos hasta "+T.hasta; }
     const vd=$("vfoot-data"); if(vd) vd.textContent = "Datos hasta: "+(T.hasta||"—");
     fetch("data/version.json?t="+Date.now(),{cache:"no-store"}).then(r=>r.json()).then(v=>{
-      const vb=$("vfoot-build"); if(!vb) return;
-      vb.textContent = "Visor actualizado: "+BUILD+" (hora Chile)";
-      if(v.build && v.build!==BUILD) vb.innerHTML += ' · <span class="nueva" onclick="location.reload(true)">⚠ hay una versión más nueva — recargar</span>';
+      const stamp = (v.actualizado||v.generado||"") + (v.build?` · ${v.build}`:"");
+      const lu=$("last-upd"); if(lu) lu.textContent = "act. "+stamp;
+      const vb=$("vfoot-build"); if(vb) vb.textContent = "Visor actualizado: "+(v.actualizado||BUILD)+" (hora Chile)";
+      // si la página cargada (cacheada) es más vieja que la publicada, avisar con un refresco forzado
+      if(v.build && v.build!==BUILD){
+        if(lu) lu.innerHTML += ' · <span style="color:#fbbf24;pointer-events:auto;cursor:pointer" onclick="location.reload(true)">⚠ recargar</span>';
+        if(vb) vb.innerHTML += ' · <span class="nueva" onclick="location.reload(true)">⚠ hay una versión más nueva — recargar (Ctrl+Shift+R)</span>';
+      }
     }).catch(()=>{ const vb=$("vfoot-build"); if(vb) vb.textContent="Visor actualizado: "+BUILD; });
     applyTheme(document.documentElement.dataset.theme==="light" ? "light" : "dark");
     J("comuna_lineas.json").then(d=>{ CLIN=d; buildLineaList($("linea-search")?$("linea-search").value:""); }).catch(()=>{});
