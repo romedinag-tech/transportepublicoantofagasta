@@ -1,1 +1,1 @@
-{"build":"afta-v5","ciudad":"Antofagasta","periodo":"2025-06","base":"corregida (map-matching)","actualizado":"2026-06-25 09:50","nota":"sello de hora + abre en Congestión + modo Terminales","generado":"2026-06-25"}
+{"build":"afta-v6","ciudad":"Antofagasta","periodo":"2025-06","base":"corregida (map-matching)","actualizado":"2026-06-25 09:58","nota":"recorridos a resolucion fiel (Douglas-Peucker, sin cortar esquinas)","generado":"2026-06-25"}
