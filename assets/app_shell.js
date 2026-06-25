@@ -4,19 +4,20 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=64`).then(r=>r.json());
-const BUILD = "afta-v15";
+const J = n => fetch(`data/${n}?v=65`).then(r=>r.json());
+const BUILD = "afta-v16";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
 let EMPR=[], MESH=[], DOWH=[], DET2=[], TERM={terminales:[]}, DEST={destinos:[]}, REC={top:[],lentos:[],reg:[],corr:[]}, EVOL={meses:[],comunas:{}};
 let VFREQ=null, VTREND=null, curVar=null, lastFitScope=null, TLIN={}, PESP={stops:[]};
 let PDWELL={paraderos:[],reparto:{}};
+let CLINE={lineas:[],nse:{}};
 let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", congTipo:"real", detTipo:"cong", cmpA:null, cmpB:null};
 let chart, csChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = ""; // Antofagasta: sin captura GTFS-RT aún → modo vivo deshabilitado (degrada)
 const BEARING_H = 270;  // vista horizontal: ciudad acostada (norte izq, sur der) y mar (oeste) abajo
-const MAP_MODES = [["recorridos","Recorridos"],["cover","Cobertura"],["oferta","Oferta"],["conges","Congestión"],["bunch","Bunching"],["det","Detenciones"],["term","Terminales"]];
+const MAP_MODES = [["recorridos","Recorridos"],["cover","Cobertura estática"],["oferta","Cobertura dinámica"],["conges","Congestión"],["bunch","Bunching"],["det","Detenciones"],["term","Terminales"]];
 const PEAK_H = [7,8,9,17,18,19];
 
 const CS_DIAS = [["L","Laboral"],["S","Sábado"],["D","Domingo"]];
@@ -187,6 +188,7 @@ function render(){
   renderKPIs(cell);
   renderHora(cell);
   renderMapa();
+  renderCoverTable();
   renderRanking();
   renderCump();
   renderCumpSem();
@@ -613,6 +615,33 @@ function drawOferta(){
   });
   setCoverLegend("oferta");
 }
+function renderCoverTable(){
+  const el=$("cover-table"); if(!el) return;
+  const rows=(CLINE&&CLINE.lineas)||[];
+  if(state.mapMode!=="cover" || state.vista!=="normal" || state.linea!=="TODAS" || !rows.length){ el.style.display="none"; el.innerHTML=""; return; }
+  el.style.display="";
+  const mx=k=>Math.max(1,...rows.map(r=>r[k]||0));
+  const mH=mx("hog"), mHK=mx("hog_km"), mE=mx("ext_km");
+  const heat=(v,m,rgb)=>`style="background:rgba(${rgb},${(m?Math.min(0.6,(v/m)*0.6):0).toFixed(2)})"`;
+  const seg=(v,tot,rgb)=>`style="background:rgba(${rgb},${(tot?Math.min(0.66,(v/tot)*0.66):0).toFixed(2)})"`;
+  const nse=CLINE.nse||{};
+  let html=`<div class="cap">Cobertura de hogares por recorrido (manzanas Censo 2024 a ≤300 m del trazado). NSE por escolaridad de adultos: <b style="color:#fb923c">bajo</b> ≤${nse.bajo} · medio · <b style="color:#2dd4bf">alto</b> &gt;${nse.alto} años. <b>Hog/km</b> = hogares ÷ extensión (eficiencia del trazado). Color = intensidad.</div>`;
+  html+=`<table><thead><tr><th class="l">Línea</th><th class="l">Recorrido</th><th>Ext (km)</th><th>Hogares</th><th>Hog/km</th><th>NSE bajo</th><th>NSE medio</th><th>NSE alto</th></tr></thead><tbody>`;
+  let prev=null;
+  rows.forEach(r=>{
+    const tot=(r.hog_baj+r.hog_med+r.hog_alt)||1;
+    const nl=r.linea!==prev; const sep=nl?' style="border-top:2px solid var(--line2)"':'';
+    html+=`<tr${sep}><td class="l grp">${nl?r.linea:''}</td><td class="l lh">${r.rec}</td>`+
+      `<td ${heat(r.ext_km,mE,'148,163,184')}>${r.ext_km}</td>`+
+      `<td ${heat(r.hog,mH,'56,189,248')}>${NF.format(r.hog)}</td>`+
+      `<td ${heat(r.hog_km,mHK,'52,211,153')}><b>${NF.format(r.hog_km)}</b></td>`+
+      `<td ${seg(r.hog_baj,tot,'251,146,60')}>${NF.format(r.hog_baj)}</td>`+
+      `<td ${seg(r.hog_med,tot,'148,163,184')}>${NF.format(r.hog_med)}</td>`+
+      `<td ${seg(r.hog_alt,tot,'45,212,191')}>${NF.format(r.hog_alt)}</td></tr>`;
+    prev=r.linea;
+  });
+  el.innerHTML=html+`</tbody></table>`;
+}
 function drawCoverage(mode){
   if(mode==="conges"){ drawCongestion(); return; }
   if(mode==="bunch"){ drawBunching(); return; }
@@ -799,7 +828,7 @@ function renderMapa(){
     const b=$("live-count"), R=(COB&&COB.resumen)||{};
     const M=state.mapMode;
     const RC = (R.cob_est)||{}, RO=(R.cob_of&&R.cob_of.por_periodo&&R.cob_of.por_periodo[state.periodo])||{};
-    const titulo = {cover:"Cobertura estática (Censo 2024 · 300 m)", oferta:`Oferta de transporte · ${periodoLbl(state.periodo)}`,
+    const titulo = {cover:"Cobertura estática (Censo 2024 · 300 m)", oferta:`Cobertura dinámica · oferta · ${periodoLbl(state.periodo)}`,
       conges:`Velocidad efectiva por arco · ${periodoLbl(state.periodo)}`, bunch:`Apelotonamiento (bunching) · ${periodoLbl(state.periodo)}`, det:(state.detTipo==="par"?"Detención de servicio en paraderos":"Congestión en tránsito y terminales"), term:"Red de terminales y cabeceras"}[M];
     const badgeSys = {cover:`${RC.pct_hog_cubiertos??"—"}% de los hogares a ≤300 m de la red · ${RC.pct_hog_80??"—"}% en manzanas ≥80% cubiertas (${fmt(RC.hogares_total||0)} hogares)`,
       oferta:`oferta media por hogar: <b>${RO.buses_h_prog??"—"}</b> bus/h programado · ${RO.buses_h_obs??"—"} observado · ${fmt(RO.pax_h_prog||0)} personas/h (${periodoLbl(state.periodo)})`,
@@ -1419,6 +1448,7 @@ function renderEvolucion(){
     J("detenciones.json").then(d=>{ DET2=d; if(state.mapMode==="det") renderMapa(); }).catch(()=>{});
     J("terminales.json").then(d=>{ TERM=d; if(state.mapMode==="det"||state.mapMode==="term") renderMapa(); }).catch(()=>{});
     J("paraderos_dwell.json").then(d=>{ PDWELL=d; if(state.mapMode==="det") renderMapa(); }).catch(()=>{});
+    J("cobertura_lineas.json").then(d=>{ CLINE=d; if(state.mapMode==="cover") renderCoverTable(); }).catch(()=>{});
     J("destinos_principales.json").then(d=>{ DEST=d; if(state.mapMode==="cover"||state.mapMode==="trans") renderMapa(); }).catch(()=>{});
     J("paraderos_espera.json").then(d=>{ PESP=d; if(state.mapMode==="wait") renderMapa(); }).catch(()=>{});
     J("empresa_stats.json").then(d=>{ EMPR=d; renderEmpresas(); }).catch(()=>{});
