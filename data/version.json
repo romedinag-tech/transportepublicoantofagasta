@@ -1,1 +1,1 @@
-{"build":"afta-v13","ciudad":"Antofagasta","periodo":"2025-06","base":"corregida (map-matching)","actualizado":"2026-06-25 14:00","nota":"fix: oferta se re-dibuja al cambiar periodo","generado":"2026-06-25"}
+{"build":"afta-v14","ciudad":"Antofagasta","periodo":"2025-06","base":"corregida (map-matching)","actualizado":"2026-06-25 14:09","nota":"congestion drapeada sobre la geometria (lineas, no celdas)","generado":"2026-06-25"}

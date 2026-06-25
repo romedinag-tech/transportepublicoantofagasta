@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=62`).then(r=>r.json());
-const BUILD = "afta-v13";
+const J = n => fetch(`data/${n}?v=63`).then(r=>r.json());
+const BUILD = "afta-v14";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -460,19 +460,34 @@ function drawCongestion(){
     });
     setCoverLegend("conges"); return;
   }
-  // SUPERFICIE CONTINUA: cada celda (round 3 ~ 0.001°) se pinta como un rectángulo que tapiza
-  // su huella, sin borde y con alta opacidad -> las celdas vecinas se integran en una superficie.
-  const cs = periodCellSpeeds();
-  const sl = sentidoLbl(state.sentido), tl = congtipoLbl(state.congTipo).toLowerCase();
-  const D = 0.00052;                       // medio paso de celda (leve solape para que no queden costuras)
-  GRID.cells.forEach((c,i)=>{
-    if(!inComuna(c[0],c[1])) return;
-    const mean = cs[i];
-    if(!(mean>0)) return;
-    L.rectangle([[c[0]-D,c[1]-D],[c[0]+D,c[1]+D]],{renderer:coverCanvas,stroke:false,
-        fillColor:congSpeedColor(mean),fillOpacity:.78})
-      .bindTooltip(`velocidad ${tl}: <b>${Math.round(mean)} km/h</b> · ${sl} (${lbl})`,{sticky:true}).addTo(coverLayer);
-  });
+  // DRAPE sobre la geometría de los recorridos: líneas finas que siguen las calles, coloreadas
+  // por la velocidad de su celda (por sentido). Continuo y preciso, no pixelado.
+  if(!GEOM){ setCoverLegend("conges"); return; }
+  if(!GRID._idx){ GRID._idx = new Map();
+    GRID.cells.forEach((c,i)=>GRID._idx.set(Math.round(c[0]*1000)+","+Math.round(c[1]*1000), i)); }
+  const hrs = PERIODO_H[state.periodo] || GRID.horas;
+  const src = (state.congTipo==="mov" ? GRID.vmov : GRID.vreal) || {};
+  const dirs = state.sentido==="amb" ? ["0","1"] : [state.sentido];
+  const spd = {};                          // por dirección: velocidad media del período por celda
+  dirs.forEach(d=>{ const vd=src[d]||{}, n=GRID.cells.length, a=new Array(n).fill(0);
+    for(let i=0;i<n;i++){ let s=0,k=0; for(const h of hrs){ const v=(vd[String(h)]||[])[i]; if(v>0){s+=v;k++;} } a[i]=k?s/k:0; }
+    spd[d]=a; });
+  const key=(la,lo)=>Math.round(la*1000)+","+Math.round(lo*1000);
+  const tl = congtipoLbl(state.congTipo).toLowerCase();
+  const emit = (pts,v,d)=> L.polyline(pts,{renderer:coverCanvas,color:congSpeedColor(v),weight:3,opacity:.92,lineCap:"round",lineJoin:"round"})
+      .bindTooltip(`velocidad ${tl}: <b>${Math.round(v)} km/h</b> · ${sentidoLbl(d)} (${lbl})`,{sticky:true}).addTo(coverLayer);
+  Object.keys(GEOM).forEach(lb=>{ (GEOM[lb]||[]).forEach(seg=>{
+    const d=String(seg.s); const arr=spd[d]; if(!arr) return;
+    const p=seg.p; if(!p||p.length<2) return;
+    let run=null;                          // agrupa tramos contiguos de la misma celda (mismo color)
+    for(let i=0;i<p.length-1;i++){
+      const ci = GRID._idx.get(key((p[i][0]+p[i+1][0])/2,(p[i][1]+p[i+1][1])/2));
+      const v = ci!=null ? arr[ci] : 0;
+      if(v>0 && run && run.ci===ci){ run.pts.push(p[i+1]); }
+      else { if(run) emit(run.pts,run.v,d); run = v>0 ? {pts:[p[i],p[i+1]], v, ci} : null; }
+    }
+    if(run) emit(run.pts,run.v,d);
+  }); });
   setCoverLegend("conges");
 }
 function congDetColor(t){ // t=0..1 (severidad) -> ámbar a rojo
