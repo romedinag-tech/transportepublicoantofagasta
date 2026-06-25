@@ -1,1 +1,1 @@
-{"build":"afta-v12","ciudad":"Antofagasta","periodo":"2025-06","base":"corregida (map-matching)","actualizado":"2026-06-25 11:35","nota":"congestion 2 tipos (movimiento/real) + superficie continua","generado":"2026-06-25"}
+{"build":"afta-v13","ciudad":"Antofagasta","periodo":"2025-06","base":"corregida (map-matching)","actualizado":"2026-06-25 14:00","nota":"fix: oferta se re-dibuja al cambiar periodo","generado":"2026-06-25"}

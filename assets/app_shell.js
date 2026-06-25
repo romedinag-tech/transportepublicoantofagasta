@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=61`).then(r=>r.json());
-const BUILD = "afta-v12";
+const J = n => fetch(`data/${n}?v=62`).then(r=>r.json());
+const BUILD = "afta-v13";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -83,7 +83,7 @@ function buildPeriodo(){
     PERIODOS.map(([k,l])=>`<b data-p="${k}" class="${state.periodo===k?"on":""}">${l}</b>`).join("")+`</div>`;
   box.querySelectorAll("b").forEach(el=>el.onclick=()=>{ state.periodo=el.dataset.p;
     box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.p===state.periodo));
-    if(state.mapMode==="conges" || state.mapMode==="wait" || state.mapMode==="bunch" || state.vista==="ranking") render(); });
+    if(state.mapMode==="conges" || state.mapMode==="oferta" || state.mapMode==="bunch" || state.vista==="ranking") render(); });
 }
 function buildPurpose(){
   const box=$("purpose-sel"); if(!box) return;
