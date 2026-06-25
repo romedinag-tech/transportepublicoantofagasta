@@ -1,0 +1,12 @@
+# El tablero es estático: se versionan index.html, assets/ y data/*.json.
+# Nunca subir datos pesados ni secretos.
+_work/
+*.zip
+*.rar
+*.parquet
+*.txt
+*.TXT
+.env
+*.secret
+.DS_Store
+Thumbs.db
