@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=68`).then(r=>r.json());
-const BUILD = "afta-v19";
+const J = n => fetch(`data/${n}?v=69`).then(r=>r.json());
+const BUILD = "afta-v20";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -14,7 +14,7 @@ let VFREQ=null, VTREND=null, curVar=null, lastFitScope=null, TLIN={}, PESP={stop
 let PDWELL={paraderos:[],reparto:{}};
 let CLINE={lineas:[],nse:{}};
 let SALT=null, salidasChart=null;
-let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", congTipo:"real", detTipo:"cong", cmpA:null, cmpB:null};
+let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", congTipo:"real", detTipo:"cong", salDia:"L", cmpA:null, cmpB:null};
 let chart, csChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = ""; // Antofagasta: sin captura GTFS-RT aún → modo vivo deshabilitado (degrada)
 const BEARING_H = 270;  // vista horizontal: ciudad acostada (norte izq, sur der) y mar (oeste) abajo
@@ -68,6 +68,8 @@ const CONG_TIPOS = [["mov","En movimiento"],["real","Real"]];
 const congtipoLbl = t => (CONG_TIPOS.find(x=>x[0]===t)||["","Real"])[1];
 // Detenciones: congestión en tránsito vs detención de servicio en paraderos.
 const DET_TIPOS = [["cong","Congestión"],["par","Paraderos"]];
+// Salidas desde terminales por tipo de día.
+const SAL_DIAS = [["L","Laboral"],["S","Sábado"],["D","Domingo"],["all","Los 3"]];
 
 function buildComunaTabs(){
   const order = (GEO.features||[]).map(f=>f.properties.name);
@@ -122,6 +124,14 @@ function buildDettipo(){
   box.querySelectorAll("b").forEach(el=>el.onclick=()=>{ state.detTipo=el.dataset.p;
     box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.p===state.detTipo));
     if(state.mapMode==="det") render(); });
+}
+function buildSaldia(){
+  const box=$("saldia-sel"); if(!box) return;
+  box.innerHTML = `<div class="seg">`+
+    SAL_DIAS.map(([k,l])=>`<b data-p="${k}" class="${state.salDia===k?"on":""}">${l}</b>`).join("")+`</div>`;
+  box.querySelectorAll("b").forEach(el=>el.onclick=()=>{ state.salDia=el.dataset.p;
+    box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.p===state.salDia));
+    renderSalidas(); });
 }
 function buildLineaList(filter=""){
   const f = filter.trim().toLowerCase();
@@ -274,30 +284,44 @@ function renderHora(cell){
 
 function renderSalidas(){
   const elc=$("ch-salidas"); if(!elc) return;
-  if(!SALT||!SALT.bins){ return; }
+  if(!SALT||!SALT.bins||!SALT.salidas){ return; }
   if(!salidasChart) salidasChart=echarts.init(elc);
   const th=TH();
   let i0=SALT.bins.indexOf(300), i1=SALT.bins.indexOf(1380);   // 5:00 .. 23:00
   if(i0<0) i0=0; if(i1<0) i1=SALT.bins.length-1;
-  const bins=SALT.bins.slice(i0,i1+1), sal=SALT.salidas.slice(i0,i1+1);
+  const bins=SALT.bins.slice(i0,i1+1);
   const lab=bins.map(m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"));
+  const S = SALT.salidas.L ? SALT.salidas : {L:SALT.salidas};   // compat estructura vieja (array plano)
+  const sl = arr => (arr||[]).slice(i0,i1+1);
+  const DEF = {L:["Laboral","#fb923c","rgba(251,146,60,.16)"], S:["Sábado","#38bdf8","rgba(56,189,248,.14)"], D:["Domingo","#a78bfa","rgba(167,139,250,.14)"]};
+  const all = state.salDia==="all";
+  const tipos = all ? ["L","S","D"] : [state.salDia];
+  const series = tipos.map(t=>({name:DEF[t][0], type:"line", data:sl(S[t]||[]), smooth:false, symbol:"none",
+    lineStyle:{width:1.9,color:DEF[t][1]}, areaStyle: all?undefined:{color:DEF[t][2]}}));
   salidasChart.setOption({
     textStyle:{fontFamily:"Inter,sans-serif",color:th.tx},
-    grid:{left:36,right:14,top:16,bottom:24,containLabel:true},
+    grid:{left:36,right:14,top:all?22:16,bottom:24,containLabel:true},
+    legend: all?{data:tipos.map(t=>DEF[t][0]),textStyle:{color:th.mut,fontSize:10},top:0,right:0,itemWidth:14,itemHeight:8}:{show:false},
     tooltip:{trigger:"axis",backgroundColor:th.tip,borderColor:th.tipB,textStyle:{color:th.tx},
-      formatter:p=>{const i=p[0].dataIndex;return `${lab[i]}–${lab[i+1]||""}<br>≈ <b>${sal[i]}</b> buses salen de terminales`;}},
+      formatter:p=>{let s=`${lab[p[0].dataIndex]}`; p.forEach(x=>s+=`<br>${x.marker}${x.seriesName}: <b>${x.value}</b>`); return s;}},
     xAxis:{type:"category",data:lab,boundaryGap:false,
       axisLabel:{color:th.mut,fontSize:10,interval:(idx)=>bins[idx]%60===0,formatter:v=>v.slice(0,2)+"h"},
       axisLine:{lineStyle:{color:th.axis}}},
     yAxis:{type:"value",name:"buses / 5 min",nameTextStyle:{color:th.mut,fontSize:10},nameGap:6,
       axisLabel:{color:th.mut,fontSize:10},splitLine:{lineStyle:{color:th.grid}}},
-    series:[{type:"line",data:sal,smooth:false,symbol:"none",lineStyle:{width:1.8,color:"#fb923c"},
-      areaStyle:{color:"rgba(251,146,60,.16)"}}]
+    series
   },true);
   setTimeout(()=>salidasChart.resize(),60);
   const nb=$("salidas-narr");
-  if(nb){ const mx=Math.max(...sal), mxi=sal.indexOf(mx); const tot=SALT.salidas.reduce((a,b)=>a+b,0);
-    nb.innerHTML=`Buses saliendo de <b>todos los terminales</b> en bins de ${SALT.bin_min} min (día laboral). Pico ≈ <b>${mx}</b>/5min a las ${lab[mxi]} · ~<b>${Math.round(tot)}</b> salidas al día. Permite ver si la frecuencia de despacho se dosifica o se mantiene pareja a lo largo del día.`;
+  if(nb){
+    const tot=t=>Math.round((S[t]||[]).reduce((a,b)=>a+b,0));
+    const d=SALT.dias||{};
+    if(all){
+      nb.innerHTML=`Salidas de buses desde <b>todos los terminales</b> (5 min): comparación <b style="color:#fb923c">laboral</b> ~${tot("L")} · <b style="color:#38bdf8">sábado</b> ~${tot("S")} · <b style="color:#a78bfa">domingo</b> ~${tot("D")} salidas/día. El domingo cae el servicio; revela cuánto se reduce la oferta el fin de semana.`;
+    } else {
+      const sal=sl(S[state.salDia]||[]); const mx=Math.max(...sal), mxi=sal.indexOf(mx);
+      nb.innerHTML=`Buses saliendo de <b>todos los terminales</b> en bins de ${SALT.bin_min} min · <b>${DEF[state.salDia][0]}</b> (promedio de ${d[state.salDia]||"—"} días). Pico ≈ <b>${mx}</b>/5min a las ${lab[mxi]} · ~<b>${tot(state.salDia)}</b> salidas al día. Muestra si la frecuencia de despacho se dosifica o se mantiene pareja.`;
+    }
   }
 }
 
@@ -1496,7 +1520,7 @@ function renderEvolucion(){
       .then(([vf,vt])=>{ VFREQ=vf; VTREND=vt; renderVarFreq(); });
     J("terminales_linea.json").then(d=>{ TLIN=d; if(state.linea!=="TODAS") renderMapa(); }).catch(()=>{});
     buildMapModes();
-    buildPeriodo(); buildPurpose(); buildSentido(); buildCongtipo(); buildDettipo();
+    buildPeriodo(); buildPurpose(); buildSentido(); buildCongtipo(); buildDettipo(); buildSaldia();
     buildComunaTabs();
     buildLineaList();
     $("linea-search").addEventListener("input", e=>buildLineaList(e.target.value));
