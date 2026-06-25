@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=59`).then(r=>r.json());
-const BUILD = "afta-v10";
+const J = n => fetch(`data/${n}?v=60`).then(r=>r.json());
+const BUILD = "afta-v11";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -15,7 +15,7 @@ let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"re
 let chart, csChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = ""; // Antofagasta: sin captura GTFS-RT aún → modo vivo deshabilitado (degrada)
 const BEARING_H = 270;  // vista horizontal: ciudad acostada (norte izq, sur der) y mar (oeste) abajo
-const MAP_MODES = [["recorridos","Recorridos"],["cover","Cobertura"],["trans","Transbordo"],["wait","Espera"],["conges","Congestión"],["bunch","Bunching"],["det","Detenciones"],["term","Terminales"],["salud","Salud"],["edu","Educación"],["nse","NSE"]];
+const MAP_MODES = [["recorridos","Recorridos"],["cover","Cobertura"],["oferta","Oferta"],["conges","Congestión"],["bunch","Bunching"],["det","Detenciones"],["term","Terminales"]];
 const PEAK_H = [7,8,9,17,18,19];
 
 const CS_DIAS = [["L","Laboral"],["S","Sábado"],["D","Domingo"]];
@@ -124,7 +124,7 @@ function render(){
     e.classList.toggle("active", on);
   });
   document.querySelectorAll(".litem").forEach(e=>e.classList.toggle("active", e.dataset.l===state.linea && state.vista==="normal"));
-  const periodoRelevante = state.vista==="ranking" || (state.vista==="normal" && state.linea==="TODAS" && (state.mapMode==="conges"||state.mapMode==="wait"||state.mapMode==="bunch"));
+  const periodoRelevante = state.vista==="ranking" || (state.vista==="normal" && state.linea==="TODAS" && (state.mapMode==="conges"||state.mapMode==="oferta"||state.mapMode==="bunch"));
   $("periodo-sel").style.display = periodoRelevante ? "flex" : "none";
   const purposeRel = state.vista==="normal" && state.linea==="TODAS" && ["cover","trans","wait"].includes(state.mapMode);
   if($("purpose-sel")) $("purpose-sel").style.display = purposeRel ? "flex" : "none";
@@ -524,11 +524,43 @@ function drawBunching(){
   });
   setCoverLegend("bunch");
 }
+// --- Cobertura (Censo 2024): manzanas coloreadas por cobertura estática u oferta ---
+function mzRings(f){   // anillos exteriores [latlng] para Polygon / MultiPolygon
+  const g=f.geometry; if(!g) return [];
+  if(g.type==="Polygon") return [g.coordinates[0].map(c=>[c[1],c[0]])];
+  return g.coordinates.map(poly=>poly[0].map(c=>[c[1],c[0]]));
+}
+const coberColor = v => v==null?"#475569":`hsl(${120*Math.min(Math.max(v/100,0),1)},72%,46%)`;   // 0% rojo -> 100% verde
+const ofertaColor = v => `hsl(${120*Math.min(Math.max((v||0)/120,0),1)},72%,46%)`;                 // 0 bus/h rojo -> 120+ verde
+function drawCobertura(){
+  if(!coverLayer) return; coverLayer.clearLayers();
+  if(!COB||!COB.features){ setCoverLegend("cover"); return; }
+  COB.features.forEach(f=>{ const p=f.properties; if(!inComuna(p.cy,p.cx)) return;
+    const col=coberColor(p.cob_est);
+    mzRings(f).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:col,fillOpacity:.55})
+      .bindTooltip(`<b>Manzana</b> · ${fmt(p.hog)} hogares<br>cobertura estática: <b>${p.cob_est}%</b> del área a ≤300 m de la red<br>${p.cob_nl||0} líneas cubren su centroide`,{sticky:true}).addTo(coverLayer));
+  });
+  setCoverLegend("cover");
+}
+function drawOferta(){
+  if(!coverLayer) return; coverLayer.clearLayers();
+  if(!COB||!COB.features){ setCoverLegend("oferta"); return; }
+  const per=state.periodo, lbl=periodoLbl(per);
+  COB.features.forEach(f=>{ const p=f.properties; if(!inComuna(p.cy,p.cx)) return;
+    const bp=(p.cob_of&&p.cob_of[per]!=null)?p.cob_of[per]:0;
+    const bo=(p.cob_of_obs&&p.cob_of_obs[per]!=null)?p.cob_of_obs[per]:0;
+    mzRings(f).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:ofertaColor(bp),fillOpacity:.6})
+      .bindTooltip(`<b>Oferta</b> (${lbl}) · ${p.cob_nl||0} líneas<br>programado: <b>${bp}</b> bus/h · ${Math.round(bp*27)} pers/h<br>observado (GPS): <b>${bo}</b> bus/h`,{sticky:true}).addTo(coverLayer));
+  });
+  setCoverLegend("oferta");
+}
 function drawCoverage(mode){
   if(mode==="conges"){ drawCongestion(); return; }
   if(mode==="bunch"){ drawBunching(); return; }
   if(mode==="det"){ drawDetenciones(); return; }
   if(mode==="term"){ drawTerminales(); return; }
+  if(mode==="cover"){ drawCobertura(); return; }
+  if(mode==="oferta"){ drawOferta(); return; }
   if(!coverLayer) return; coverLayer.clearLayers();
   if(!COB) return;
   COB.features.forEach(f=>{
@@ -603,7 +635,8 @@ function setCoverLegend(mode){
   if(!mode) return;
   const RYG = `<span class="grad" style="background:linear-gradient(90deg,hsl(120,72%,50%),hsl(60,72%,50%),hsl(0,72%,50%))"></span>`;
   const GYR = `<span class="grad" style="background:linear-gradient(90deg,hsl(0,70%,50%),hsl(60,70%,50%),hsl(120,70%,50%))"></span>`;
-  const txt = mode==="cover" ? ["% de destinos EOD alcanzables (≤1 transbordo)",GYR,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>color de la manzana = accesibilidad · ○ destino (tamaño = demanda)</span>"]
+  const txt = mode==="cover" ? ["Cobertura estática (% del área a ≤300 m de la red)",GYR,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>color de la manzana = fracción cubierta · rojo lejos / verde cubierta</span>"]
+    : mode==="oferta" ? [`Oferta · buses/h (${periodoLbl(state.periodo)})`,GYR,"<span class='lbls'><i>0</i><i>60</i><i>120+</i></span><span class='par'>líneas cuyo buffer 300 m cubre la manzana · hover: prog vs observado</span>"]
     : mode==="trans" ? ["Intensidad de transbordo (% de lo alcanzable)",RYG,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>verde = directo · rojo = exige transbordo</span>"]
     : mode==="wait" ? [`Espera hacia destinos · ${periodoLbl(state.periodo)} (min)`,RYG,"<span class='lbls'><i>0</i><i>1.5</i><i>3+</i></span><span class='par'>manzana = espera a destinos · ● paradero = espera ahí (hover)</span>"]
     : mode==="salud" ? ["Tiempo a salud en transporte (min)",RYG,"<span class='lbls'><i>0</i><i>12</i><i>25+</i></span><span class='par' style='color:#f43f5e'>● centro de salud</span>"]
@@ -705,13 +738,11 @@ function renderMapa(){
     drawCoverage(state.mapMode);
     const b=$("live-count"), R=(COB&&COB.resumen)||{};
     const M=state.mapMode;
-    const titulo = {cover:"Cobertura: destinos alcanzables",trans:"Dependencia de transbordo",wait:`Espera hacia destinos · ${periodoLbl(state.periodo)}`,
-      conges:`Velocidad efectiva por arco · ${periodoLbl(state.periodo)}`, bunch:`Apelotonamiento (bunching) · ${periodoLbl(state.periodo)}`, det:"Congestión y terminales", term:"Red de terminales y cabeceras",
-      salud:"Accesibilidad a salud en transporte",edu:"Accesibilidad a educación en transporte",nse:"Nivel socioeconómico (avalúo)"}[M];
-    // resumen sólo a nivel sistema (COB.resumen es de todo el GC); en comuna, etiqueta de ámbito
-    const badgeSys = {cover:`${R.dacc_medio??"—"}% de la demanda-destino EOD es alcanzable (≤1 transbordo) · destinos dimensionados por viajes`,
-      trans:`intensidad de transbordo media ${R.tbi_medio??"—"}% · rojo = zonas/destinos que exigen transbordo (integración modal/tarifaria)`,
-      wait:`espera media hacia destinos ${(R.waitd_medio&&R.waitd_medio[state.periodo])??"—"} min · frecuencia real observada · cambia con el período`,
+    const RC = (R.cob_est)||{}, RO=(R.cob_of&&R.cob_of.por_periodo&&R.cob_of.por_periodo[state.periodo])||{};
+    const titulo = {cover:"Cobertura estática (Censo 2024 · 300 m)", oferta:`Oferta de transporte · ${periodoLbl(state.periodo)}`,
+      conges:`Velocidad efectiva por arco · ${periodoLbl(state.periodo)}`, bunch:`Apelotonamiento (bunching) · ${periodoLbl(state.periodo)}`, det:"Congestión y terminales", term:"Red de terminales y cabeceras"}[M];
+    const badgeSys = {cover:`${RC.pct_hog_cubiertos??"—"}% de los hogares a ≤300 m de la red · ${RC.pct_hog_80??"—"}% en manzanas ≥80% cubiertas (${fmt(RC.hogares_total||0)} hogares)`,
+      oferta:`oferta media por hogar: <b>${RO.buses_h_prog??"—"}</b> bus/h programado · ${RO.buses_h_obs??"—"} observado · ${fmt(RO.pax_h_prog||0)} personas/h (${periodoLbl(state.periodo)})`,
       conges:`velocidad efectiva (incluye detenido en tránsito) · sentido ${sentidoLbl(state.sentido)} · ${periodoLbl(state.periodo)} · rojo = ejes lentos`,
       bunch:`regularidad de los buses (CV de headways) en ${periodoLbl(state.periodo)} · rojo = se apelotonan ⇒ peor espera efectiva`,
       det:`${DET2.length} nodos de congestión (sin terminales) · ${(TERM&&TERM.terminales||[]).length} terminales detectados`,
@@ -755,14 +786,11 @@ function renderNarrative(){
   const pe = pu!=="all" ? ` de ${pl}` : "";
   let txt="";
   if(M==="cover"){
-    const v=scopeWavg(p=>p.dacc&&p.dacc[pu]);
-    txt=`<b>Cobertura</b> mide qué % de los <b>destinos reales</b> de la ciudad (matriz EOD) puede alcanzar cada manzana en transporte público con a lo más un transbordo, ponderado por los viajes${pe}. Verde = manzana bien conectada con sus destinos; rojo = aislada. ${v!=null?`En ${amb}, en promedio el <b>${v.toFixed(0)}%</b> de la demanda-destino es alcanzable. `:""}Va más allá de "¿hay un paradero cerca?": pregunta si el bus que pasa te lleva a donde la gente realmente viaja.`;
-  } else if(M==="trans"){
-    const v=scopeWavg(p=>p.tbi&&p.tbi[pu]);
-    txt=`<b>Transbordo</b> muestra cuánto de la demanda alcanzable <b>obliga a combinar dos buses</b>${pe}. Verde = llegas directo; rojo = dependes de transbordar (hoy = pagar dos pasajes). ${v!=null?`En ${amb}, la intensidad media de transbordo es <b>${v.toFixed(0)}%</b>. `:""}Es el insumo central para proponer <b>integración modal y tarifaria</b>: las zonas rojas son las que más se beneficiarían.`;
-  } else if(M==="wait"){
-    const v=scopeWavg(p=>p.waitd&&p.waitd[pu]&&p.waitd[pu][per]);
-    txt=`<b>Espera</b> estima el tiempo efectivo de espera hacia los destinos${pe}: ½·intervalo·(1+CV²), con la <b>frecuencia real en el sentido que va hacia el destino</b> (un bus en dirección contraria no cuenta) y penalizando el <b>apelotonamiento</b>. ${v!=null?`Media en ${amb} (${periodoLbl(per)}): <b>${v.toFixed(1)} min</b>. `:""}Cambia con el período — compara punta y fuera de punta.`;
+    const R=(COB&&COB.resumen&&COB.resumen.cob_est)||{};
+    txt=`<b>Cobertura estática</b>: qué fracción del área de cada manzana está a <b>≤300 m</b> de la red de transporte público (geometría oficial GTFS), sobre las <b>manzanas del Censo 2024</b>. Verde = manzana cubierta; rojo = lejos de la red. En Antofagasta, el <b>${R.pct_hog_cubiertos??"—"}% de los hogares</b> vive dentro del área de influencia (${R.pct_hog_80??"—"}% en manzanas ≥80% cubiertas). Es el "¿hay servicio cerca?" — independiente del horario.`;
+  } else if(M==="oferta"){
+    const RO=(COB&&COB.resumen&&COB.resumen.cob_of&&COB.resumen.cob_of.por_periodo&&COB.resumen.cob_of.por_periodo[per])||{};
+    txt=`<b>Oferta</b> (cobertura dinámica): cuántos <b>buses/hora</b> pasan a ≤300 m de cada manzana en <b>${periodoLbl(per)}</b>, sumando las líneas que la cubren. Verde = mucha oferta; rojo = poca. Se muestra la frecuencia <b>programada</b> (GTFS) y, al pasar el cursor, la <b>observada</b> (GPS). Media por hogar: <b>${RO.buses_h_prog??"—"} bus/h programado</b> vs ${RO.buses_h_obs??"—"} observado (≈ ${fmt(RO.pax_h_prog||0)} personas/h sentados). Cambia con el período.`;
   } else if(M==="conges"){
     const v=GRID?(function(){const cs=periodCellSpeeds().filter(x=>x>0);return cs.length?cs.reduce((a,b)=>a+b,0)/cs.length:null;})():null;
     txt=`<b>Congestión</b>: <b>velocidad efectiva</b> de los buses por arco de la red en <b>${periodoLbl(per)}</b>, sentido <b>${sentidoLbl(state.sentido)}</b> — incluye el <b>tiempo detenido en tránsito</b> (semáforos, tacos), no solo cuando el bus avanza, por eso revela la congestión real. Ida y regreso se miden por separado (un eje puede estar lento solo en un sentido). Rojo = ejes lentos. ${v!=null?`Velocidad efectiva media: <b>${v.toFixed(1)} km/h</b>. `:""}Cambia el sentido y el período para ver dónde y cuándo aparece.`;
