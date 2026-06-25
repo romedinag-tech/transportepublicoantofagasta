@@ -4,14 +4,15 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=63`).then(r=>r.json());
-const BUILD = "afta-v14";
+const J = n => fetch(`data/${n}?v=64`).then(r=>r.json());
+const BUILD = "afta-v15";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
 let EMPR=[], MESH=[], DOWH=[], DET2=[], TERM={terminales:[]}, DEST={destinos:[]}, REC={top:[],lentos:[],reg:[],corr:[]}, EVOL={meses:[],comunas:{}};
 let VFREQ=null, VTREND=null, curVar=null, lastFitScope=null, TLIN={}, PESP={stops:[]};
-let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", congTipo:"real", cmpA:null, cmpB:null};
+let PDWELL={paraderos:[],reparto:{}};
+let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", congTipo:"real", detTipo:"cong", cmpA:null, cmpB:null};
 let chart, csChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = ""; // Antofagasta: sin captura GTFS-RT aún → modo vivo deshabilitado (degrada)
 const BEARING_H = 270;  // vista horizontal: ciudad acostada (norte izq, sur der) y mar (oeste) abajo
@@ -63,6 +64,8 @@ const sentidoLbl = s => (SENTIDOS.find(x=>x[0]===s)||["","Ambos"])[1];
 // Tipo de velocidad para Congestión: en movimiento (marcha) vs real/comercial (incluye paraderos).
 const CONG_TIPOS = [["mov","En movimiento"],["real","Real"]];
 const congtipoLbl = t => (CONG_TIPOS.find(x=>x[0]===t)||["","Real"])[1];
+// Detenciones: congestión en tránsito vs detención de servicio en paraderos.
+const DET_TIPOS = [["cong","Congestión"],["par","Paraderos"]];
 
 function buildComunaTabs(){
   const order = (GEO.features||[]).map(f=>f.properties.name);
@@ -109,6 +112,14 @@ function buildCongtipo(){
     box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.p===state.congTipo));
     if(state.mapMode==="conges") render(); });
 }
+function buildDettipo(){
+  const box=$("dettipo-sel"); if(!box) return;
+  box.innerHTML = `<span class="lbl">Detención</span><div class="seg">`+
+    DET_TIPOS.map(([k,l])=>`<b data-p="${k}" class="${state.detTipo===k?"on":""}">${l}</b>`).join("")+`</div>`;
+  box.querySelectorAll("b").forEach(el=>el.onclick=()=>{ state.detTipo=el.dataset.p;
+    box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.p===state.detTipo));
+    if(state.mapMode==="det") render(); });
+}
 function buildLineaList(filter=""){
   const f = filter.trim().toLowerCase();
   const setC = (state.comuna!=="TODAS" && CLIN[state.comuna]) ? new Set(CLIN[state.comuna]) : null;
@@ -145,6 +156,8 @@ function render(){
   // Tipo de velocidad (movimiento/real) solo en Congestión
   const congtipoRel = state.vista==="normal" && state.mapMode==="conges";
   if($("congtipo-sel")) $("congtipo-sel").style.display = congtipoRel ? "flex" : "none";
+  const dettipoRel = state.vista==="normal" && state.mapMode==="det";
+  if($("dettipo-sel")) $("dettipo-sel").style.display = dettipoRel ? "flex" : "none";
 
   // VISTAS ESPECIALES (territorio): ranking / comparador de comunas
   if(state.vista==="ranking" || state.vista==="comparador"){
@@ -493,20 +506,21 @@ function drawCongestion(){
 function congDetColor(t){ // t=0..1 (severidad) -> ámbar a rojo
   const h = 45 - 45*Math.min(1,t); return `hsl(${h},85%,52%)`;
 }
+const dwellColor = v => `hsl(${48-48*Math.min((v||0)/180,1)},88%,52%)`;   // s detenido: amarillo bajo -> rojo 180s+
 function drawDetenciones(){
   if(!coverLayer) return; coverLayer.clearLayers();
+  if(state.detTipo==="par"){ drawParaderosDwell(); return; }
+  // CONGESTIÓN en tránsito (paraderos y terminales ya separados en el dato) + terminales (▣)
   const cong = (DET2||[]).filter(d=>inComuna(d.la,d.lo));
   const terms = ((TERM&&TERM.terminales)||[]).filter(t=>inComuna(t.la,t.lo));
-  // congestión: nodos reales de demora (terminales ya excluidos en el dato)
   if(cong.length){
     const mx=Math.max(...cong.map(d=>d.det));
     cong.forEach(d=>{
       const r=6+22*Math.sqrt(d.det/mx);
-      L.circleMarker([d.la,d.lo],{renderer:coverCanvas,radius:r,weight:1,color:"rgba(0,0,0,.35)",fillColor:congDetColor(d.det/mx),fillOpacity:.6})
-        .bindTooltip(`<b>${d.calle||d.tipo}</b> · ${d.comuna||""}<br>${d.tipo}<br>Tiempo detenido: ${fmt(d.det)} pulsos · ${d.buses} buses distintos`,{sticky:true}).addTo(coverLayer);
+      L.circleMarker([d.la,d.lo],{renderer:coverCanvas,radius:r,weight:1,color:"rgba(0,0,0,.35)",fillColor:congDetColor(d.det/mx),fillOpacity:.62})
+        .bindTooltip(`<b>${d.calle||d.tipo}</b> · congestión en tránsito<br>≈ <b>${fmt(d.seg_bus_dia||0)} s</b> detenido por bus·día · ${d.buses} buses<br><span style="color:var(--dim)">${fmt(d.det)} pulsos · intensidad ${d.intens}</span>`,{sticky:true}).addTo(coverLayer);
     });
   }
-  // terminales / cabeceras: capa distinta con flota por línea
   terms.forEach(t=>{
     const dom = (t.lineas&&t.lineas[0]) ? t.lineas[0].linea : "T";
     const rows = (t.lineas||[]).map(l=>`<tr><td style="padding:0 8px 0 0">Línea ${l.linea}</td><td style="text-align:right"><b>${l.buses}</b> buses</td></tr>`).join("");
@@ -516,6 +530,17 @@ function drawDetenciones(){
       {sticky:true,direction:"top"}).addTo(coverLayer);
   });
   setCoverLegend("det");
+}
+function drawParaderosDwell(){
+  const par = ((PDWELL&&PDWELL.paraderos)||[]).filter(p=>inComuna(p.la,p.lo));
+  if(!par.length){ setCoverLegend("detpar"); return; }
+  const mx = Math.max(60, ...par.map(p=>p.seg_bus_dia||0));
+  par.forEach(p=>{
+    const r = 3.5 + 15*Math.sqrt(Math.min(1,(p.seg_bus_dia||0)/mx));
+    L.circleMarker([p.la,p.lo],{renderer:coverCanvas,radius:r,weight:1,color:"rgba(0,0,0,.35)",fillColor:dwellColor(p.seg_bus_dia),fillOpacity:.72})
+      .bindTooltip(`<b>${p.nombre||"Paradero"}</b><br>detención de servicio: <b>${p.seg_bus_dia} s</b> por bus·día · ${p.buses} buses<br><span style="color:var(--dim)">tiempo de subida/bajada de pasajeros</span>`,{sticky:true}).addTo(coverLayer);
+  });
+  setCoverLegend("detpar");
 }
 function drawTerminales(){
   // Red de terminales y cabeceras (ubicación + flota por línea). Capa propia, sin congestión.
@@ -677,7 +702,8 @@ function setCoverLegend(mode){
     : mode==="edu" ? ["Tiempo a educación en transporte (min)",RYG,"<span class='lbls'><i>0</i><i>12</i><i>25+</i></span><span class='par' style='color:#a78bfa'>● colegio</span>"]
     : mode==="conges" ? [`Velocidad ${congtipoLbl(state.congTipo).toLowerCase()} · ${sentidoLbl(state.sentido)} · ${periodoLbl(state.periodo)} (km/h)`,`<span class="grad" style="background:linear-gradient(90deg,hsl(0,75%,50%),hsl(60,75%,50%),hsl(120,75%,50%))"></span>`,"<span class='lbls'><i>≤10</i><i>20</i><i>30+</i></span><span class='par'>"+(state.congTipo==="mov"?"solo cuando el bus avanza (excl. detenciones)":"real/comercial: incluye paradas en paraderos y semáforos")+" · excl. terminal</span>"]
     : mode==="bunch" ? [`Apelotonamiento · ${periodoLbl(state.periodo)} (CV de headways)`,`<span class="grad" style="background:linear-gradient(90deg,hsl(120,75%,50%),hsl(60,75%,50%),hsl(0,75%,50%))"></span>`,"<span class='lbls'><i>regular</i><i></i><i>apelotonado</i></span><span class='par'>CV alto = buses pegados unos a otros</span>"]
-    : mode==="det" ? ["Congestión: nodos de demora (sin terminales)",`<span class="grad" style="background:linear-gradient(90deg,hsl(45,85%,52%),hsl(0,85%,52%))"></span>`,"<span class='lbls'><i>menor</i><i>mayor</i></span><span class='par'><b style='color:#22d3ee'>▣</b> terminal · flota por línea al pasar</span>"]
+    : mode==="det" ? ["Congestión en tránsito (semáforos / tacos)",`<span class="grad" style="background:linear-gradient(90deg,hsl(45,85%,52%),hsl(0,85%,52%))"></span>`,"<span class='lbls'><i>menor</i><i>mayor</i></span><span class='par'>tamaño = tiempo detenido · <b style='color:#22d3ee'>▣</b> terminal (flota al pasar)</span>"]
+    : mode==="detpar" ? ["Detención de servicio por paradero (s/bus·día)",`<span class="grad" style="background:linear-gradient(90deg,hsl(48,88%,52%),hsl(0,88%,52%))"></span>`,"<span class='lbls'><i>0</i><i>90</i><i>180+</i></span><span class='par'>tiempo de subida/bajada de pasajeros en cada parada</span>"]
     : mode==="term" ? ["Red de terminales y cabeceras",`<span style="display:inline-block;width:14px;height:14px;border:1.5px solid #22d3ee;background:rgba(34,211,238,.15);border-radius:50%;vertical-align:middle"></span>`,"<span class='par'><b style='color:#22d3ee'>▣</b> terminal · tamaño del anillo = flota que opera desde ahí · hover = líneas</span>"]
     : ["NSE (avalúo CLP/m²)",`<span class="grad" style="background:linear-gradient(90deg,hsl(205,68%,52%),hsl(118,68%,52%),hsl(30,68%,52%))"></span>`,"<span class='lbls'><i>bajo</i><i></i><i>alto</i></span>"];
   coverLegend = L.control({position:"bottomleft"});
@@ -774,12 +800,14 @@ function renderMapa(){
     const M=state.mapMode;
     const RC = (R.cob_est)||{}, RO=(R.cob_of&&R.cob_of.por_periodo&&R.cob_of.por_periodo[state.periodo])||{};
     const titulo = {cover:"Cobertura estática (Censo 2024 · 300 m)", oferta:`Oferta de transporte · ${periodoLbl(state.periodo)}`,
-      conges:`Velocidad efectiva por arco · ${periodoLbl(state.periodo)}`, bunch:`Apelotonamiento (bunching) · ${periodoLbl(state.periodo)}`, det:"Congestión y terminales", term:"Red de terminales y cabeceras"}[M];
+      conges:`Velocidad efectiva por arco · ${periodoLbl(state.periodo)}`, bunch:`Apelotonamiento (bunching) · ${periodoLbl(state.periodo)}`, det:(state.detTipo==="par"?"Detención de servicio en paraderos":"Congestión en tránsito y terminales"), term:"Red de terminales y cabeceras"}[M];
     const badgeSys = {cover:`${RC.pct_hog_cubiertos??"—"}% de los hogares a ≤300 m de la red · ${RC.pct_hog_80??"—"}% en manzanas ≥80% cubiertas (${fmt(RC.hogares_total||0)} hogares)`,
       oferta:`oferta media por hogar: <b>${RO.buses_h_prog??"—"}</b> bus/h programado · ${RO.buses_h_obs??"—"} observado · ${fmt(RO.pax_h_prog||0)} personas/h (${periodoLbl(state.periodo)})`,
       conges:`velocidad ${congtipoLbl(state.congTipo).toLowerCase()} · sentido ${sentidoLbl(state.sentido)} · ${periodoLbl(state.periodo)} · rojo = ejes lentos`,
       bunch:`regularidad de los buses (CV de headways) en ${periodoLbl(state.periodo)} · rojo = se apelotonan ⇒ peor espera efectiva`,
-      det:`${DET2.length} nodos de congestión (sin terminales) · ${(TERM&&TERM.terminales||[]).length} terminales detectados`,
+      det:(()=>{const R=(PDWELL&&PDWELL.reparto)||{}; return state.detTipo==="par"
+        ? `${(PDWELL&&PDWELL.paraderos||[]).length} paraderos con dwell · el ${R.paradero??"—"}% del tiempo detenido en ruta es servicio en paraderos`
+        : `${DET2.length} focos de congestión · ${(TERM&&TERM.terminales||[]).length} terminales · reparto del detenido: paradero ${R.paradero??"—"}% · congestión ${R.congestion??"—"}% · terminal ${R.terminal??"—"}%`;})(),
       salud:`tiempo mediano a salud: ${R.salud_med} min`, edu:`tiempo mediano a educación: ${R.edu_med} min`,
       nse:"avalúo m² · azul bajo → ámbar alto"}[M];
     if(b) b.textContent = state.comuna==="TODAS" ? (badgeSys||"") : `${titulo} · ${state.comuna}`;
@@ -835,7 +863,10 @@ function renderNarrative(){
   } else if(M==="bunch"){
     txt=`<b>Bunching</b>: regularidad de los intervalos entre buses (CV de los headways) medida en puntos de la red, en <b>${periodoLbl(per)}</b>. Verde = buses parejos; rojo = <b>apelotonados</b> (vienen pegados y luego un hueco largo) → peor espera efectiva aguas abajo. Es la huella de la congestión sobre la frecuencia.`;
   } else if(M==="det"){
-    txt=`<b>Detenciones</b>: nodos donde los buses pasan más tiempo detenidos, <b>excluyendo los terminales</b> (que distorsionan por la espera de cabecera). Los círculos ámbar→rojo son cuellos de demora en marcha; las cajas <b>▣</b> cyan son terminales, con su flota por línea al pasar el cursor.`;
+    const R=(PDWELL&&PDWELL.reparto)||{};
+    txt = state.detTipo==="par"
+      ? `<b>Detención de servicio en paraderos</b>: cuánto tiempo se detiene el bus en cada parada del GTFS para subir/bajar pasajeros (segundos por bus·día). Amarillo→rojo = paraderos donde más se demora. Es detención <b>esperada</b> (no es falla). En Antofagasta, el <b>${R.paradero??"—"}%</b> del tiempo detenido en ruta ocurre en paraderos. Alterna a <b>Congestión</b> para ver la demora por semáforos/tacos.`
+      : `<b>Congestión en tránsito</b>: focos donde el bus se detiene por <b>semáforos o tacos</b> — separados de las paradas de servicio y de los terminales. Los círculos ámbar→rojo son los cuellos reales de demora (con su calle). Reparto del tiempo detenido en ruta: <b>${R.congestion??"—"}%</b> congestión · ${R.paradero??"—"}% paraderos · ${R.terminal??"—"}% terminal. Las cajas <b>▣</b> son terminales. Alterna a <b>Paraderos</b> para ver el dwell de servicio.`;
   } else if(M==="term"){
     const nt=((TERM&&TERM.terminales)||[]).filter(t=>inComuna(t.la,t.lo)).length;
     txt=`<b>Red de terminales y cabeceras</b>: ${nt} terminal${nt===1?"":"es"} detectado${nt===1?"":"s"} por intensidad de detención (buses que reposan en cabecera: muchos minutos por bus). El <b>anillo</b> es proporcional a la <b>flota que opera desde ahí</b> y la caja <b>▣</b> marca la línea dominante; al pasar el cursor se ve la flota por línea. Se concentran en los extremos del eje (norte: La Chimba; sur: Coloso / Jardines del Sur).`;
@@ -1387,6 +1418,7 @@ function renderEvolucion(){
     J("red_freq.json").then(d=>{ RFREQ=d; if(state.mapMode==="bunch") renderMapa(); }).catch(()=>{});
     J("detenciones.json").then(d=>{ DET2=d; if(state.mapMode==="det") renderMapa(); }).catch(()=>{});
     J("terminales.json").then(d=>{ TERM=d; if(state.mapMode==="det"||state.mapMode==="term") renderMapa(); }).catch(()=>{});
+    J("paraderos_dwell.json").then(d=>{ PDWELL=d; if(state.mapMode==="det") renderMapa(); }).catch(()=>{});
     J("destinos_principales.json").then(d=>{ DEST=d; if(state.mapMode==="cover"||state.mapMode==="trans") renderMapa(); }).catch(()=>{});
     J("paraderos_espera.json").then(d=>{ PESP=d; if(state.mapMode==="wait") renderMapa(); }).catch(()=>{});
     J("empresa_stats.json").then(d=>{ EMPR=d; renderEmpresas(); }).catch(()=>{});
@@ -1399,7 +1431,7 @@ function renderEvolucion(){
       .then(([vf,vt])=>{ VFREQ=vf; VTREND=vt; renderVarFreq(); });
     J("terminales_linea.json").then(d=>{ TLIN=d; if(state.linea!=="TODAS") renderMapa(); }).catch(()=>{});
     buildMapModes();
-    buildPeriodo(); buildPurpose(); buildSentido(); buildCongtipo();
+    buildPeriodo(); buildPurpose(); buildSentido(); buildCongtipo(); buildDettipo();
     buildComunaTabs();
     buildLineaList();
     $("linea-search").addEventListener("input", e=>buildLineaList(e.target.value));

@@ -1,1 +1,1 @@
-{"build":"afta-v14","ciudad":"Antofagasta","periodo":"2025-06","base":"corregida (map-matching)","actualizado":"2026-06-25 14:09","nota":"congestion drapeada sobre la geometria (lineas, no celdas)","generado":"2026-06-25"}
+{"build":"afta-v15","ciudad":"Antofagasta","periodo":"2025-06","base":"corregida (map-matching)","actualizado":"2026-06-25 14:32","nota":"detenciones: congestion vs paraderos (dwell) + red vial OSM","generado":"2026-06-25"}
