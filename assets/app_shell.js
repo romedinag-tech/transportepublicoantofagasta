@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=66`).then(r=>r.json());
-const BUILD = "afta-v17";
+const J = n => fetch(`data/${n}?v=67`).then(r=>r.json());
+const BUILD = "afta-v18";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -13,6 +13,7 @@ let EMPR=[], MESH=[], DOWH=[], DET2=[], TERM={terminales:[]}, DEST={destinos:[]}
 let VFREQ=null, VTREND=null, curVar=null, lastFitScope=null, TLIN={}, PESP={stops:[]};
 let PDWELL={paraderos:[],reparto:{}};
 let CLINE={lineas:[],nse:{}};
+let SALT=null, salidasChart=null;
 let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", congTipo:"real", detTipo:"cong", cmpA:null, cmpB:null};
 let chart, csChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = ""; // Antofagasta: sin captura GTFS-RT aún → modo vivo deshabilitado (degrada)
@@ -188,6 +189,7 @@ function render(){
   const cell = cellOf();
   renderKPIs(cell);
   renderHora(cell);
+  renderSalidas();
   renderMapa();
   renderCoverTable();
   renderRanking();
@@ -267,6 +269,35 @@ function renderHora(cell){
     if(hb.length&&hv.length){ const pk=hb.reduce((a,b)=>b[1]>a[1]?b:a), mn=hv.reduce((a,b)=>b[1]<a[1]?b:a);
       t+=` Punta: <b>${fmt1(pk[1])}</b> buses a las ${HORAS[pk[0]]}; velocidad mínima <b>${fmt1(mn[1])} km/h</b> a las ${HORAS[mn[0]]}.`; }
     el.innerHTML=t;
+  }
+}
+
+function renderSalidas(){
+  const elc=$("ch-salidas"); if(!elc) return;
+  if(!SALT||!SALT.bins){ return; }
+  if(!salidasChart) salidasChart=echarts.init(elc);
+  const th=TH();
+  let i0=SALT.bins.indexOf(300), i1=SALT.bins.indexOf(1380);   // 5:00 .. 23:00
+  if(i0<0) i0=0; if(i1<0) i1=SALT.bins.length-1;
+  const bins=SALT.bins.slice(i0,i1+1), sal=SALT.salidas.slice(i0,i1+1);
+  const lab=bins.map(m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"));
+  salidasChart.setOption({
+    textStyle:{fontFamily:"Inter,sans-serif",color:th.tx},
+    grid:{left:36,right:14,top:16,bottom:24,containLabel:true},
+    tooltip:{trigger:"axis",backgroundColor:th.tip,borderColor:th.tipB,textStyle:{color:th.tx},
+      formatter:p=>{const i=p[0].dataIndex;return `${lab[i]}–${lab[i+1]||""}<br>≈ <b>${sal[i]}</b> buses salen de terminales`;}},
+    xAxis:{type:"category",data:lab,boundaryGap:false,
+      axisLabel:{color:th.mut,fontSize:10,interval:(idx)=>bins[idx]%60===0,formatter:v=>v.slice(0,2)+"h"},
+      axisLine:{lineStyle:{color:th.axis}}},
+    yAxis:{type:"value",name:"buses / 5 min",nameTextStyle:{color:th.mut,fontSize:10},nameGap:6,
+      axisLabel:{color:th.mut,fontSize:10},splitLine:{lineStyle:{color:th.grid}}},
+    series:[{type:"line",data:sal,smooth:false,symbol:"none",lineStyle:{width:1.8,color:"#fb923c"},
+      areaStyle:{color:"rgba(251,146,60,.16)"}}]
+  },true);
+  setTimeout(()=>salidasChart.resize(),60);
+  const nb=$("salidas-narr");
+  if(nb){ const mx=Math.max(...sal), mxi=sal.indexOf(mx); const tot=SALT.salidas.reduce((a,b)=>a+b,0);
+    nb.innerHTML=`Buses saliendo de <b>todos los terminales</b> en bins de ${SALT.bin_min} min (día laboral). Pico ≈ <b>${mx}</b>/5min a las ${lab[mxi]} · ~<b>${Math.round(tot)}</b> salidas al día. Permite ver si la frecuencia de despacho se dosifica o se mantiene pareja a lo largo del día.`;
   }
 }
 
@@ -1450,6 +1481,7 @@ function renderEvolucion(){
     J("terminales.json").then(d=>{ TERM=d; if(state.mapMode==="det"||state.mapMode==="term") renderMapa(); }).catch(()=>{});
     J("paraderos_dwell.json").then(d=>{ PDWELL=d; if(state.mapMode==="det") renderMapa(); }).catch(()=>{});
     J("cobertura_lineas.json").then(d=>{ CLINE=d; if(state.mapMode==="cover") renderCoverTable(); }).catch(()=>{});
+    J("salidas_terminal.json").then(d=>{ SALT=d; renderSalidas(); }).catch(()=>{});
     J("destinos_principales.json").then(d=>{ DEST=d; if(state.mapMode==="cover"||state.mapMode==="trans") renderMapa(); }).catch(()=>{});
     J("paraderos_espera.json").then(d=>{ PESP=d; if(state.mapMode==="wait") renderMapa(); }).catch(()=>{});
     J("empresa_stats.json").then(d=>{ EMPR=d; renderEmpresas(); }).catch(()=>{});
