@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=69`).then(r=>r.json());
-const BUILD = "afta-v20";
+const J = n => fetch(`data/${n}?v=70`).then(r=>r.json());
+const BUILD = "afta-v21";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -159,7 +159,7 @@ function render(){
     e.classList.toggle("active", on);
   });
   document.querySelectorAll(".litem").forEach(e=>e.classList.toggle("active", e.dataset.l===state.linea && state.vista==="normal"));
-  const periodoRelevante = state.vista==="ranking" || (state.vista==="normal" && state.linea==="TODAS" && (state.mapMode==="conges"||state.mapMode==="oferta"||state.mapMode==="bunch"));
+  const periodoRelevante = state.vista==="ranking" || (state.vista==="normal" && (state.mapMode==="conges"||state.mapMode==="oferta"||state.mapMode==="bunch"));
   $("periodo-sel").style.display = periodoRelevante ? "flex" : "none";
   const purposeRel = state.vista==="normal" && state.linea==="TODAS" && ["cover","trans","wait"].includes(state.mapMode);
   if($("purpose-sel")) $("purpose-sel").style.display = purposeRel ? "flex" : "none";
@@ -245,6 +245,10 @@ function renderKPIs(cell){
   ];
   if(state.linea==="TODAS")
     cards.push(kpiCard("Líneas", k.n_lineas, "operando en Antofagasta", "🧭", "neutral"));
+  else {
+    const nv = GEOM&&GEOM[state.linea] ? new Set(GEOM[state.linea].map(s=>s.rec)).size : "—";
+    cards.push(kpiCard("Variantes", nv, "recorridos de la línea", "🧭", "neutral"));
+  }
   cards.push(kpiCard("Tiempo de ciclo", fmtDur(k.tc), "ida + regreso · en marcha", "⏱️", "neutral"));
   cards.push(kpiCard("Distancia de ciclo", (k.dc!=null?fmt1(k.dc):"—")+" km", "ida + regreso", "📏", "neutral"));
   $("kpis2").innerHTML = cards.join("");
@@ -489,6 +493,37 @@ function periodCellSpeeds(){            // velocidad media por celda en el perí
   }
   return sp;
 }
+// --- proyección local + manzanas cubiertas por una línea (buffer 300 m, caché por línea) ---
+const _LON0=-70.3938, _LAT0=-23.6146, _MX=111320*Math.cos(_LAT0*Math.PI/180), _MY=110540;
+const toM = (la,lo)=>[(lo-_LON0)*_MX,(la-_LAT0)*_MY];
+function _ptSeg(px,py,ax,ay,bx,by){ const dx=bx-ax,dy=by-ay,L2=dx*dx+dy*dy||1e-9;
+  let t=((px-ax)*dx+(py-ay)*dy)/L2; t=t<0?0:t>1?1:t; const fx=ax+t*dx,fy=ay+t*dy; return Math.hypot(px-fx,py-fy); }
+let _covCache={};
+function coveredManzanas(linea, R=300){
+  const key=linea+"|"+R; if(_covCache[key]) return _covCache[key];
+  const set=new Set(); if(!COB||!COB.features||!GEOM[linea]) return _covCache[key]=set;
+  let mnLa=9,mxLa=-9,mnLo=9,mxLo=-9; const segs=[];
+  (GEOM[linea]||[]).forEach(s=>{ const p=s.p; for(let i=0;i<p.length-1;i++){ const a=toM(p[i][0],p[i][1]),b=toM(p[i+1][0],p[i+1][1]); segs.push([a[0],a[1],b[0],b[1]]); }
+    p.forEach(pt=>{ mnLa=Math.min(mnLa,pt[0]);mxLa=Math.max(mxLa,pt[0]);mnLo=Math.min(mnLo,pt[1]);mxLo=Math.max(mxLo,pt[1]); }); });
+  const pad=0.005;
+  COB.features.forEach((f,idx)=>{ const p=f.properties, la=p.cy, lo=p.cx;
+    if(la<mnLa-pad||la>mxLa+pad||lo<mnLo-pad||lo>mxLo+pad) return;
+    const c=toM(la,lo); let dmin=1e9;
+    for(const s of segs){ const d=_ptSeg(c[0],c[1],s[0],s[1],s[2],s[3]); if(d<dmin){ dmin=d; if(dmin<=R) break; } }
+    if(dmin<=R) set.add(idx);
+  });
+  return _covCache[key]=set;
+}
+let _segCache={};
+function _lineSegs(linea){
+  if(_segCache[linea]) return _segCache[linea];
+  const segs=[]; (GEOM[linea]||[]).forEach(s=>{ const p=s.p; for(let i=0;i<p.length-1;i++){ const a=toM(p[i][0],p[i][1]),b=toM(p[i+1][0],p[i+1][1]); segs.push([a[0],a[1],b[0],b[1]]); } });
+  return _segCache[linea]=segs;
+}
+function nearLine(la,lo,linea,R=300){
+  const segs=_lineSegs(linea); if(!segs.length) return false; const c=toM(la,lo);
+  for(const s of segs){ if(_ptSeg(c[0],c[1],s[0],s[1],s[2],s[3])<=R) return true; } return false;
+}
 function drawAllRoutes(){
   // Modo "Recorridos": dibuja TODA la red de la ciudad, cada línea con su color oficial GTFS.
   if(!routeLayer || !GEOM) return;
@@ -547,7 +582,8 @@ function drawCongestion(){
   const tl = congtipoLbl(state.congTipo).toLowerCase();
   const emit = (pts,v,d)=> L.polyline(pts,{renderer:coverCanvas,color:congSpeedColor(v),weight:3,opacity:.92,lineCap:"round",lineJoin:"round"})
       .bindTooltip(`velocidad ${tl}: <b>${Math.round(v)} km/h</b> · ${sentidoLbl(d)} (${lbl})`,{sticky:true}).addTo(coverLayer);
-  Object.keys(GEOM).forEach(lb=>{ (GEOM[lb]||[]).forEach(seg=>{
+  const lbs = state.linea!=="TODAS" ? (GEOM[state.linea]?[state.linea]:[]) : Object.keys(GEOM);
+  lbs.forEach(lb=>{ (GEOM[lb]||[]).forEach(seg=>{
     const d=String(seg.s); const arr=spd[d]; if(!arr) return;
     const p=seg.p; if(!p||p.length<2) return;
     let run=null;                          // agrupa tramos contiguos de la misma celda (mismo color)
@@ -569,8 +605,11 @@ function drawDetenciones(){
   if(!coverLayer) return; coverLayer.clearLayers();
   if(state.detTipo==="par"){ drawParaderosDwell(); return; }
   // CONGESTIÓN en tránsito (paraderos y terminales ya separados en el dato) + terminales (▣)
-  const cong = (DET2||[]).filter(d=>inComuna(d.la,d.lo));
-  const terms = ((TERM&&TERM.terminales)||[]).filter(t=>inComuna(t.la,t.lo));
+  const onL = state.linea!=="TODAS";
+  let cong = (DET2||[]).filter(d=>inComuna(d.la,d.lo));
+  let terms = ((TERM&&TERM.terminales)||[]).filter(t=>inComuna(t.la,t.lo));
+  if(onL){ cong = cong.filter(d=>nearLine(d.la,d.lo,state.linea));
+    terms = terms.filter(t=>(t.lineas||[]).some(l=>String(l.linea)===String(state.linea))); }
   if(cong.length){
     const mx=Math.max(...cong.map(d=>d.det));
     cong.forEach(d=>{
@@ -590,7 +629,8 @@ function drawDetenciones(){
   setCoverLegend("det");
 }
 function drawParaderosDwell(){
-  const par = ((PDWELL&&PDWELL.paraderos)||[]).filter(p=>inComuna(p.la,p.lo));
+  let par = ((PDWELL&&PDWELL.paraderos)||[]).filter(p=>inComuna(p.la,p.lo));
+  if(state.linea!=="TODAS") par = par.filter(p=>nearLine(p.la,p.lo,state.linea));
   if(!par.length){ setCoverLegend("detpar"); return; }
   const mx = Math.max(60, ...par.map(p=>p.seg_bus_dia||0));
   par.forEach(p=>{
@@ -649,13 +689,23 @@ function mzRings(f){   // anillos exteriores [latlng] para Polygon / MultiPolygo
 }
 const coberColor = v => v==null?"#475569":`hsl(${120*Math.min(Math.max(v/100,0),1)},72%,46%)`;   // 0% rojo -> 100% verde
 const ofertaColor = v => `hsl(${120*Math.min(Math.max((v||0)/120,0),1)},72%,46%)`;                 // 0 bus/h rojo -> 120+ verde
+function lineaFreqPeriodo(linea, per){     // buses/h observados de la línea en el período (de cumplimiento)
+  const d=CUMP&&CUMP.lineas&&CUMP.lineas[linea]; if(!d||!d.obs||!d.obs.L||!CUMP.horas) return null;
+  const arr=d.obs.L, HC=CUMP.horas, hrs=PERIODO_H[per]||HC; let s=0,k=0;
+  hrs.forEach(h=>{ const i=HC.indexOf(h); if(i>=0&&arr[i]>0){ s+=arr[i]; k++; } });
+  return k?Math.round(s/k*10)/10:0;
+}
 function drawCobertura(){
   if(!coverLayer) return; coverLayer.clearLayers();
   if(!COB||!COB.features){ setCoverLegend("cover"); return; }
-  COB.features.forEach(f=>{ const p=f.properties; if(!inComuna(p.cy,p.cx)) return;
-    const col=coberColor(p.cob_est);
-    mzRings(f).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:col,fillOpacity:.55})
-      .bindTooltip(`<b>Manzana</b> · ${fmt(p.hog)} hogares<br>cobertura estática: <b>${p.cob_est}%</b> del área a ≤300 m de la red<br>${p.cob_nl||0} líneas cubren su centroide`,{sticky:true}).addTo(coverLayer));
+  const lset = state.linea!=="TODAS" ? coveredManzanas(state.linea) : null;
+  COB.features.forEach((f,idx)=>{ const p=f.properties; if(!inComuna(p.cy,p.cx)) return;
+    if(lset && !lset.has(idx)) return;
+    const col = lset ? "#22d3ee" : coberColor(p.cob_est);   // línea: manzanas que cubre (cian) · sistema: % cubierto
+    mzRings(f).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:col,fillOpacity:lset?.5:.55})
+      .bindTooltip(lset
+        ? `<b>Manzana</b> · ${fmt(p.hog)} hogares<br>cubierta por la línea ${state.linea} (≤300 m)`
+        : `<b>Manzana</b> · ${fmt(p.hog)} hogares<br>cobertura estática: <b>${p.cob_est}%</b> del área a ≤300 m de la red<br>${p.cob_nl||0} líneas cubren su centroide`,{sticky:true}).addTo(coverLayer));
   });
   setCoverLegend("cover");
 }
@@ -663,7 +713,15 @@ function drawOferta(){
   if(!coverLayer) return; coverLayer.clearLayers();
   if(!COB||!COB.features){ setCoverLegend("oferta"); return; }
   const per=state.periodo, lbl=periodoLbl(per);
-  COB.features.forEach(f=>{ const p=f.properties; if(!inComuna(p.cy,p.cx)) return;
+  const lset = state.linea!=="TODAS" ? coveredManzanas(state.linea) : null;
+  const lf = lset ? (lineaFreqPeriodo(state.linea, per)||0) : 0;   // buses/h de la línea (uniforme en su cobertura)
+  COB.features.forEach((f,idx)=>{ const p=f.properties; if(!inComuna(p.cy,p.cx)) return;
+    if(lset && !lset.has(idx)) return;
+    if(lset){
+      mzRings(f).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:ofertaColor(lf),fillOpacity:.55})
+        .bindTooltip(`<b>Manzana</b> · ${fmt(p.hog)} hogares<br>oferta de la línea ${state.linea} (${lbl}): <b>${lf}</b> bus/h · ${Math.round(lf*27)} pers/h`,{sticky:true}).addTo(coverLayer));
+      return;
+    }
     const bp=(p.cob_of&&p.cob_of[per]!=null)?p.cob_of[per]:0;
     const bo=(p.cob_of_obs&&p.cob_of_obs[per]!=null)?p.cob_of_obs[per]:0;
     mzRings(f).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:ofertaColor(bp),fillOpacity:.6})
@@ -830,40 +888,29 @@ function renderMapa(){
   });
   let bounds=[];
   setSpeedLegend(state.linea!=="TODAS" && !!GEOM[state.linea]);
+  const isRec = state.mapMode==="recorridos";
   if(state.linea!=="TODAS" && GEOM[state.linea]){
     GEOM[state.linea].forEach(seg=>{
-      const p=seg.p, v=seg.v||[];
-      // colorear por velocidad map-matched, segmento a segmento
-      for(let i=0;i<p.length-1;i++){
-        const a=v[i], b=v[i+1];
-        const sv = (a!=null&&b!=null)?(a+b)/2 : (a!=null?a:b);
-        L.polyline([p[i],p[i+1]],{color:speedColor(sv),weight:4,opacity:0.92}).addTo(routeLayer);
+      const p=seg.p;
+      if(isRec){                              // Recorridos: trazado coloreado de la línea
+        const col = seg.col?("#"+seg.col):"#38bdf8";
+        L.polyline(p,{color:col,weight:4,opacity:0.92,lineCap:"round"}).addTo(routeLayer);
+      } else {                                // otros modos: trazado como contexto tenue
+        L.polyline(p,{color:"rgba(148,161,186,.45)",weight:2,opacity:.7}).addTo(routeLayer);
       }
       bounds.push(...p);
     });
-    // paraderos oficiales de la línea
+    setSpeedLegend(false);
+    // paraderos oficiales de la línea (solo en Recorridos, para no saturar)
     const ps = PAR[state.linea]||[];
-    ps.forEach(s=>{
+    if(isRec) ps.forEach(s=>{
       L.circleMarker([s[0],s[1]],{radius:3.2,color:"#0b1220",weight:1,fillColor:"#e2e8f0",fillOpacity:0.95})
         .bindTooltip(s[2],{direction:"top"}).addTo(stopLayer);
     });
-    // TERMINALES y cabeceras de la línea (▣ = terminal con dwell; ◇ = cabecera de ruta)
-    const tl = TLIN[state.linea];
-    if(tl && tl.puntos){
-      tl.puntos.forEach(t=>{
-        if(t.tipo==="terminal"){
-          const icon=L.divIcon({className:"term-ic",html:`<div class="term-box">▣ Terminal</div>`,iconSize:[58,18],iconAnchor:[29,9]});
-          L.marker([t.lat,t.lon],{icon,zIndexOffset:600}).bindTooltip(
-            `<b>Terminal · Línea ${state.linea}</b><br>${NF.format(t.det)} pulsos detenidos · ${t.buses} buses<br>intensidad ${t.intens} (reposo por bus/día)<br><span style="color:#fbbf24">se excluye del análisis en ruta</span>`,
-            {sticky:true,direction:"top"}).addTo(routeLayer);
-        } else {
-          L.circleMarker([t.lat,t.lon],{radius:6,weight:2,color:"#38bdf8",fillColor:"#0b1220",fillOpacity:.5})
-            .bindTooltip(`Cabecera de ruta · Línea ${state.linea}`,{direction:"top"}).addTo(routeLayer);
-        }
-      });
+    if(isRec){
+      const nrec = new Set(GEOM[state.linea].map(s=>s.rec)).size;
+      $("map-title").textContent = `Línea ${state.linea} · ${nrec} variante${nrec>1?"s":""} · ${ps.length} paraderos`;
     }
-    const nrec = new Set(GEOM[state.linea].map(s=>s.rec)).size;
-    $("map-title").textContent = `Línea ${state.linea} · ${nrec} recorrido${nrec>1?"s":""} · ${ps.length} paraderos · color = velocidad`;
   } else if(state.comuna!=="TODAS"){
     const f = feats.find(x=>x.properties.name===state.comuna);
     if(f){ const gl=L.geoJSON(f); bounds = gl.getBounds(); }
@@ -876,34 +923,45 @@ function renderMapa(){
   if(fitScope!==lastFitScope){ lastFitScope=fitScope;
     try{ if(bounds && (bounds.length||bounds.isValid&&bounds.isValid())) lmap.fitBounds(bounds,{padding:[20,20]}); }catch(e){}
   }
-  // capas territoriales disponibles en SISTEMA y en COMUNA (eje territorial); en vista de LÍNEA no
-  const territorial = state.linea==="TODAS";
-  const ambito = state.comuna==="TODAS" ? "Antofagasta" : state.comuna;
-  const seg = $("map-mode"); if(seg) seg.style.display = territorial ? "" : "none";
-  if(territorial && state.mapMode!=="recorridos"){
+  // Modos de mapa disponibles en SISTEMA, COMUNA y LÍNEA (en línea, scopeados a esa línea).
+  const lineaView = state.linea!=="TODAS";
+  const seg = $("map-mode"); if(seg) seg.style.display = "";
+  if(state.mapMode!=="recorridos"){
     liveLayer.clearLayers();
     drawCoverage(state.mapMode);
     const b=$("live-count"), R=(COB&&COB.resumen)||{};
     const M=state.mapMode;
     const RC = (R.cob_est)||{}, RO=(R.cob_of&&R.cob_of.por_periodo&&R.cob_of.por_periodo[state.periodo])||{};
     const titulo = {cover:"Cobertura estática (Censo 2024 · 300 m)", oferta:`Cobertura dinámica · oferta · ${periodoLbl(state.periodo)}`,
-      conges:`Velocidad efectiva por arco · ${periodoLbl(state.periodo)}`, bunch:`Apelotonamiento (bunching) · ${periodoLbl(state.periodo)}`, det:(state.detTipo==="par"?"Detención de servicio en paraderos":"Congestión en tránsito y terminales"), term:"Red de terminales y cabeceras"}[M];
-    const badgeSys = {cover:`${RC.pct_hog_cubiertos??"—"}% de los hogares a ≤300 m de la red · ${RC.pct_hog_80??"—"}% en manzanas ≥80% cubiertas (${fmt(RC.hogares_total||0)} hogares)`,
-      oferta:`oferta media por hogar: <b>${RO.buses_h_prog??"—"}</b> bus/h programado · ${RO.buses_h_obs??"—"} observado · ${fmt(RO.pax_h_prog||0)} personas/h (${periodoLbl(state.periodo)})`,
-      conges:`velocidad ${congtipoLbl(state.congTipo).toLowerCase()} · sentido ${sentidoLbl(state.sentido)} · ${periodoLbl(state.periodo)} · rojo = ejes lentos`,
-      bunch:`regularidad de los buses (CV de headways) en ${periodoLbl(state.periodo)} · rojo = se apelotonan ⇒ peor espera efectiva`,
-      det:(()=>{const R=(PDWELL&&PDWELL.reparto)||{}; return state.detTipo==="par"
-        ? `${(PDWELL&&PDWELL.paraderos||[]).length} paraderos con dwell · el ${R.paradero??"—"}% del tiempo detenido en ruta es servicio en paraderos`
-        : `${DET2.length} focos de congestión · ${(TERM&&TERM.terminales||[]).length} terminales · reparto del detenido: paradero ${R.paradero??"—"}% · congestión ${R.congestion??"—"}% · terminal ${R.terminal??"—"}%`;})(),
-      salud:`tiempo mediano a salud: ${R.salud_med} min`, edu:`tiempo mediano a educación: ${R.edu_med} min`,
-      nse:"avalúo m² · azul bajo → ámbar alto"}[M];
-    if(b) b.textContent = state.comuna==="TODAS" ? (badgeSys||"") : `${titulo} · ${state.comuna}`;
-    $("map-title").textContent = (titulo||"Mapa territorial") + (state.comuna==="TODAS"?"":` · ${state.comuna}`);
+      conges:`Velocidad ${congtipoLbl(state.congTipo).toLowerCase()} · ${periodoLbl(state.periodo)}`, bunch:`Apelotonamiento (bunching) · ${periodoLbl(state.periodo)}`, det:(state.detTipo==="par"?"Detención de servicio en paraderos":"Congestión en tránsito y terminales"), term:"Red de terminales y cabeceras"}[M];
+    if(lineaView){
+      $("map-title").textContent = (titulo||"") + ` · Línea ${state.linea}`;
+      if(b) b.innerHTML = (()=>{
+        const cm = (M==="cover"||M==="oferta") && COB&&COB.features ? coveredManzanas(state.linea) : null;
+        let hg=0; if(cm) cm.forEach(i=>hg+=(COB.features[i].properties.hog||0));
+        const row=(CLINE.lineas||[]).find(r=>r.linea===state.linea&&r.rec===state.linea)||(CLINE.lineas||[]).find(r=>r.linea===state.linea);
+        if(M==="cover") return `Línea ${state.linea}: cubre ${cm?cm.size:0} manzanas · ${fmt(hg)} hogares a ≤300 m`;
+        if(M==="oferta") return `Línea ${state.linea}: ${lineaFreqPeriodo(state.linea,state.periodo)??"—"} bus/h (${periodoLbl(state.periodo)}) en ${cm?cm.size:0} manzanas`;
+        if(M==="conges") return `Línea ${state.linea}: velocidad ${congtipoLbl(state.congTipo).toLowerCase()}${row&&row.vel?` ≈ <b>${row.vel}</b> km/h comercial`:""} · ${periodoLbl(state.periodo)}`;
+        if(M==="det") return `Detenciones de la línea ${state.linea} (focos + terminales)`;
+        if(M==="term") return `Terminales de la línea ${state.linea}`;
+        return `Línea ${state.linea}`;
+      })();
+    } else {
+      const badgeSys = {cover:`${RC.pct_hog_cubiertos??"—"}% de los hogares a ≤300 m de la red · ${RC.pct_hog_80??"—"}% en manzanas ≥80% cubiertas (${fmt(RC.hogares_total||0)} hogares)`,
+        oferta:`oferta media por hogar: <b>${RO.buses_h_prog??"—"}</b> bus/h programado · ${RO.buses_h_obs??"—"} observado · ${fmt(RO.pax_h_prog||0)} personas/h (${periodoLbl(state.periodo)})`,
+        conges:`velocidad ${congtipoLbl(state.congTipo).toLowerCase()} · sentido ${sentidoLbl(state.sentido)} · ${periodoLbl(state.periodo)} · rojo = ejes lentos`,
+        det:(()=>{const Rp=(PDWELL&&PDWELL.reparto)||{}; return state.detTipo==="par"
+          ? `${(PDWELL&&PDWELL.paraderos||[]).length} paraderos con dwell · el ${Rp.paradero??"—"}% del tiempo detenido en ruta es servicio en paraderos`
+          : `${DET2.length} focos de congestión · ${(TERM&&TERM.terminales||[]).length} terminales · reparto del detenido: paradero ${Rp.paradero??"—"}% · congestión ${Rp.congestion??"—"}% · terminal ${Rp.terminal??"—"}%`;})(),
+        term:`${(TERM&&TERM.terminales||[]).length} terminales detectados`}[M];
+      if(b) b.textContent = state.comuna==="TODAS" ? (badgeSys||"") : `${titulo} · ${state.comuna}`;
+      $("map-title").textContent = (titulo||"Mapa territorial") + (state.comuna==="TODAS"?"":` · ${state.comuna}`);
+    }
   } else {
     if(coverLayer) coverLayer.clearLayers(); setCoverLegend(null);
     if(liveLayer) liveLayer.clearLayers();
-    if(state.linea==="TODAS") drawAllRoutes();   // modo Recorridos: toda la red dibujada
-    // en vista de línea el recorrido ya se dibujó arriba (bloque GEOM)
+    if(!lineaView) drawAllRoutes();   // sistema: toda la red. Línea: recorrido ya dibujado arriba.
   }
   renderNarrative();
 }
@@ -1497,7 +1555,7 @@ function renderEvolucion(){
     }).catch(()=>{ const vb=$("vfoot-build"); if(vb) vb.textContent="Visor actualizado: "+BUILD; });
     applyTheme(document.documentElement.dataset.theme==="light" ? "light" : "dark");
     J("comuna_lineas.json").then(d=>{ CLIN=d; buildLineaList($("linea-search")?$("linea-search").value:""); }).catch(()=>{});
-    J("cobertura.json").then(d=>{ COB=d; renderNseGap(); if(state.mapMode!=="recorridos") renderMapa(); }).catch(()=>{});
+    J("cobertura.json").then(d=>{ COB=d; _covCache={}; renderNseGap(); if(state.mapMode!=="recorridos") renderMapa(); }).catch(()=>{});
     J("flota_equidad.json").then(d=>{ EQ=d; renderEquidad(); }).catch(()=>{});
     J("operacion_linea.json").then(d=>{ OP=d; renderOperacion(); renderCalidad(); }).catch(()=>{});
     J("speed_grid_hora.json").then(d=>{ GRID=d; if(state.mapMode==="conges") renderMapa(); }).catch(()=>{});
