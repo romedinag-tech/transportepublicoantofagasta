@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=55`).then(r=>r.json());
-const BUILD = "afta-v6";
+const J = n => fetch(`data/${n}?v=56`).then(r=>r.json());
+const BUILD = "afta-v7";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -185,19 +185,26 @@ function kpiCard(l,v,s,icon,stt){   // stt = good|warning|critical|neutral
 // umbral "más alto es mejor" (velocidad) y "más bajo es mejor" (detenido)
 const semHigh = (v,g,w) => v>=g?"good":v>=w?"warning":"critical";
 const semLow  = (v,g,w) => v<g?"good":v<w?"warning":"critical";
+function fmtDur(min){ // minutos -> "3h 30m" / "45 min"
+  if(min==null) return "—";
+  const h=Math.floor(min/60), m=Math.round(min%60);
+  return h>0 ? `${h}h ${m}m` : `${m} min`;
+}
 function renderKPIs(cell){
   const k = cell.kpi;
   if(!k){ $("kpis2").innerHTML = `<div class="empty">Sin datos para este ámbito.</div>`; return; }
-  const ctx = state.linea!=="TODAS"
-      ? kpiCard("Comunas que sirve", k.n_comunas, "presencia territorial", "🗺️", "neutral")
-      : kpiCard("Líneas", k.n_lineas, "operando en el ámbito", "🚍", "neutral");
-  $("kpis2").innerHTML = [
-    kpiCard("Registros GPS", (k.pulsos/1e6).toFixed(1)+" M", "pulsos en el ámbito", "📡", "neutral"),
-    kpiCard("Flota en punta", fmt(k.flota_pico), "buses activos máx/hora", "🚍", "neutral"),
+  const buses = k.flota_total!=null ? k.flota_total : k.flota_pico;
+  const busesSub = k.flota_pico!=null ? `${fmt(k.flota_pico)} en hora punta` : "buses en operación";
+  const cards = [
+    kpiCard("Buses que operan", fmt(buses), busesSub, "🚍", "neutral"),
     kpiCard("Velocidad media", fmt1(k.vel)+" km/h", "efectiva, en ruta", "⚡", semHigh(k.vel,22,14)),
     kpiCard("Tiempo detenido", fmt1(k.pct_det)+" %", "en ruta · excl. terminales", "🛑", semLow(k.pct_det,18,28)),
-    ctx,
-  ].join("");
+  ];
+  if(state.linea==="TODAS")
+    cards.push(kpiCard("Líneas", k.n_lineas, "operando en Antofagasta", "🧭", "neutral"));
+  cards.push(kpiCard("Tiempo de ciclo", fmtDur(k.tc), "ida + regreso · en marcha", "⏱️", "neutral"));
+  cards.push(kpiCard("Distancia de ciclo", (k.dc!=null?fmt1(k.dc):"—")+" km", "ida + regreso", "📏", "neutral"));
+  $("kpis2").innerHTML = cards.join("");
 }
 
 function renderHora(cell){

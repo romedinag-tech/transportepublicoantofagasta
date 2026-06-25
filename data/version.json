@@ -1,1 +1,1 @@
-{"build":"afta-v6","ciudad":"Antofagasta","periodo":"2025-06","base":"corregida (map-matching)","actualizado":"2026-06-25 09:58","nota":"recorridos a resolucion fiel (Douglas-Peucker, sin cortar esquinas)","generado":"2026-06-25"}
+{"build":"afta-v7","ciudad":"Antofagasta","periodo":"2025-06","base":"corregida (map-matching)","actualizado":"2026-06-25 10:12","nota":"tarjetas KPI: buses/velocidad/detenido/lineas/tiempo y distancia de ciclo","generado":"2026-06-25"}
