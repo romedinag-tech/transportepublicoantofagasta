@@ -4,17 +4,17 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=56`).then(r=>r.json());
-const BUILD = "afta-v7";
+const J = n => fetch(`data/${n}?v=58`).then(r=>r.json());
+const BUILD = "afta-v9";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
 let EMPR=[], MESH=[], DOWH=[], DET2=[], TERM={terminales:[]}, DEST={destinos:[]}, REC={top:[],lentos:[],reg:[],corr:[]}, EVOL={meses:[],comunas:{}};
 let VFREQ=null, VTREND=null, curVar=null, lastFitScope=null, TLIN={}, PESP={stops:[]};
-let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"conges", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", cmpA:null, cmpB:null};
+let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", cmpA:null, cmpB:null};
 let chart, csChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = ""; // Antofagasta: sin captura GTFS-RT aún → modo vivo deshabilitado (degrada)
-const MAP_MODES = [["live","En vivo"],["cover","Cobertura"],["trans","Transbordo"],["wait","Espera"],["conges","Congestión"],["bunch","Bunching"],["det","Detenciones"],["term","Terminales"],["salud","Salud"],["edu","Educación"],["nse","NSE"]];
+const MAP_MODES = [["recorridos","Recorridos"],["cover","Cobertura"],["trans","Transbordo"],["wait","Espera"],["conges","Congestión"],["bunch","Bunching"],["det","Detenciones"],["term","Terminales"],["salud","Salud"],["edu","Educación"],["nse","NSE"]];
 const PEAK_H = [7,8,9,17,18,19];
 
 const CS_DIAS = [["L","Laboral"],["S","Sábado"],["D","Domingo"]];
@@ -382,6 +382,27 @@ function periodCellSpeeds(){            // velocidad media por celda en el perí
   }
   return sp;
 }
+function drawAllRoutes(){
+  // Modo "Recorridos": dibuja TODA la red de la ciudad, cada línea con su color oficial GTFS.
+  if(!routeLayer || !GEOM) return;
+  routeLayer.clearLayers();
+  let nlineas = 0, nshapes = 0;
+  Object.keys(GEOM).sort((a,b)=>(a[0]>='0'&&a[0]<='9'?+a:1e9)-(b[0]>='0'&&b[0]<='9'?+b:1e9)).forEach(lb=>{
+    let drew=false;
+    (GEOM[lb]||[]).forEach(seg=>{
+      if(!seg.p || seg.p.length<2) return;
+      const col = "#"+(seg.col||"38bdf8");
+      const pl = L.polyline(seg.p,{renderer:coverCanvas,color:col,weight:2.6,opacity:.82,lineCap:"round"})
+        .bindTooltip(`Línea ${lb}`,{sticky:true});
+      pl.on("click",()=>{ state.linea=lb; state.comuna="TODAS"; state.vista="normal";
+        if($("linea-search")) buildLineaList($("linea-search").value); render(); });
+      pl.addTo(routeLayer); nshapes++; drew=true;
+    });
+    if(drew) nlineas++;
+  });
+  $("map-title").textContent = `Recorridos de Antofagasta · ${nlineas} líneas · ${nshapes} trazados`;
+  const b=$("live-count"); if(b) b.textContent = "toda la red · clic en una línea para verla";
+}
 function drawCongestion(){
   if(!coverLayer) return; coverLayer.clearLayers();
   if(!GRID){ setCoverLegend("conges"); return; }
@@ -658,7 +679,7 @@ function renderMapa(){
   const territorial = state.linea==="TODAS";
   const ambito = state.comuna==="TODAS" ? "Antofagasta" : state.comuna;
   const seg = $("map-mode"); if(seg) seg.style.display = territorial ? "" : "none";
-  if(territorial && state.mapMode!=="live"){
+  if(territorial && state.mapMode!=="recorridos"){
     liveLayer.clearLayers();
     drawCoverage(state.mapMode);
     const b=$("live-count"), R=(COB&&COB.resumen)||{};
@@ -679,7 +700,9 @@ function renderMapa(){
     $("map-title").textContent = (titulo||"Mapa territorial") + (state.comuna==="TODAS"?"":` · ${state.comuna}`);
   } else {
     if(coverLayer) coverLayer.clearLayers(); setCoverLegend(null);
-    drawLiveBuses();
+    if(liveLayer) liveLayer.clearLayers();
+    if(state.linea==="TODAS") drawAllRoutes();   // modo Recorridos: toda la red dibujada
+    // en vista de línea el recorrido ya se dibujó arriba (bloque GEOM)
   }
   renderNarrative();
 }
@@ -734,9 +757,9 @@ function renderNarrative(){
     txt=`Tiempo de viaje en transporte público desde cada manzana al ${M==="salud"?"<b>centro de salud</b>":"<b>establecimiento educacional</b>"} más cercano (caminata + espera + bus). ${v!=null?`Mediana ${amb}: <b>${v.toFixed(0)} min</b>. `:""}Verde = cerca en tiempo real de viaje; rojo = lejos.`;
   } else if(M==="nse"){
     txt=`<b>Nivel socioeconómico</b> por manzana (avalúo del suelo como proxy). No es un KPI de transporte en sí: sirve para <b>cruzarlo</b> con cobertura, transbordo y espera y evaluar <b>equidad territorial</b> — ¿las zonas más vulnerables tienen peor servicio?`;
-  } else if(M==="live"){
-    const n=(LIVE&&LIVE.length)||0;
-    txt=`<b>En vivo</b>: posición de los buses operando en este momento (GTFS-RT). Cyan = en movimiento, ámbar = detenido. ${n?`Ahora mismo: <b>${NF.format(n)}</b> buses. `:""}Es la foto operacional instantánea del sistema.`;
+  } else if(M==="recorridos"){
+    const nl=GEOM?Object.keys(GEOM).length:0;
+    txt=`<b>Recorridos</b>: la red completa de transporte público de Antofagasta — <b>${nl} líneas</b> con su trazado oficial sobre las calles, cada una en su color. <b>Clic en una línea</b> (en el mapa o en la barra lateral) para ver solo ese recorrido, sus paraderos y terminales.`;
   }
   el.innerHTML = txt;
 }
@@ -1269,7 +1292,7 @@ function renderEvolucion(){
     }).catch(()=>{ const vb=$("vfoot-build"); if(vb) vb.textContent="Visor actualizado: "+BUILD; });
     applyTheme(document.documentElement.dataset.theme==="light" ? "light" : "dark");
     J("comuna_lineas.json").then(d=>{ CLIN=d; buildLineaList($("linea-search")?$("linea-search").value:""); }).catch(()=>{});
-    J("cobertura.json").then(d=>{ COB=d; renderNseGap(); if(state.mapMode!=="live") renderMapa(); }).catch(()=>{});
+    J("cobertura.json").then(d=>{ COB=d; renderNseGap(); if(state.mapMode!=="recorridos") renderMapa(); }).catch(()=>{});
     J("flota_equidad.json").then(d=>{ EQ=d; renderEquidad(); }).catch(()=>{});
     J("operacion_linea.json").then(d=>{ OP=d; renderOperacion(); renderCalidad(); }).catch(()=>{});
     J("speed_grid_hora.json").then(d=>{ GRID=d; if(state.mapMode==="conges") renderMapa(); }).catch(()=>{});
@@ -1295,7 +1318,7 @@ function renderEvolucion(){
     $("linea-search").addEventListener("input", e=>buildLineaList(e.target.value));
     $("reset-btn").onclick = ()=>{ Object.assign(state,{comuna:"TODAS",linea:"TODAS",vista:"normal"}); $("linea-search").value=""; buildLineaList(); render(); };
     render();
-    loadLive(); setInterval(loadLive, 60000);   // buses operando ahora, refresco 60 s
+    // Antofagasta sin GTFS-RT: no hay polling en vivo. El modo "Recorridos" muestra la red.
     addEventListener("resize", ()=>{ [chart,csChart,eqChart,nseChart,rankChart,cmpChart,empresasChart,heatChart,recChart,evolChart].forEach(c=>{try{c&&c.resize();}catch(e){}}); if(lmap) lmap.invalidateSize(); });
   }catch(e){ console.error(e); $("kpis2").innerHTML=`<div class="empty">No se pudieron cargar los datos.</div>`; }
 })();
