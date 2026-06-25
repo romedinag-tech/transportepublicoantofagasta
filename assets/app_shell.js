@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=65`).then(r=>r.json());
-const BUILD = "afta-v16";
+const J = n => fetch(`data/${n}?v=66`).then(r=>r.json());
+const BUILD = "afta-v17";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -71,7 +71,8 @@ const DET_TIPOS = [["cong","Congestión"],["par","Paraderos"]];
 function buildComunaTabs(){
   const order = (GEO.features||[]).map(f=>f.properties.name);
   let html = `<span class="ctab" data-c="TODAS" data-v="normal">Antofagasta</span>`;
-  order.forEach(c=> html += `<span class="ctab" data-c="${c}" data-v="normal">${c}</span>`);
+  // mono-comuna: no se repite la pestaña de comuna (sería un segundo "Antofagasta" redundante)
+  if(order.length>1) order.forEach(c=> html += `<span class="ctab" data-c="${c}" data-v="normal">${c}</span>`);
   html += `<span class="vsep"></span><span class="ctab special" data-v="ranking">▦ Ranking</span><span class="ctab special" data-v="comparador">⇄ Comparador</span>`;
   $("comuna-tabs").innerHTML = html;
   $("comuna-tabs").querySelectorAll(".ctab").forEach(el=>{
