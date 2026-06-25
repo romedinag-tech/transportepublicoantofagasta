@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=67`).then(r=>r.json());
-const BUILD = "afta-v18";
+const J = n => fetch(`data/${n}?v=68`).then(r=>r.json());
+const BUILD = "afta-v19";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -656,15 +656,17 @@ function renderCoverTable(){
   const mH=mx("hog"), mHK=mx("hog_km"), mE=mx("ext_km");
   const heat=(v,m,rgb)=>`style="background:rgba(${rgb},${(m?Math.min(0.6,(v/m)*0.6):0).toFixed(2)})"`;
   const seg=(v,tot,rgb)=>`style="background:rgba(${rgb},${(tot?Math.min(0.66,(v/tot)*0.66):0).toFixed(2)})"`;
+  const velBg=v=>v?`style="background:hsla(${(Math.max(0,Math.min((v-12)/7,1))*120).toFixed(0)},70%,45%,.42)"`:'';   // 12 km/h rojo -> 19+ verde
   const nse=CLINE.nse||{};
-  let html=`<div class="cap">Cobertura de hogares por recorrido (manzanas Censo 2024 a ≤300 m del trazado). NSE por escolaridad de adultos: <b style="color:#fb923c">bajo</b> ≤${nse.bajo} · medio · <b style="color:#2dd4bf">alto</b> &gt;${nse.alto} años. <b>Hog/km</b> = hogares ÷ extensión (eficiencia del trazado). Color = intensidad.</div>`;
-  html+=`<table><thead><tr><th class="l">Línea</th><th class="l">Recorrido</th><th>Ext (km)</th><th>Hogares</th><th>Hog/km</th><th>NSE bajo</th><th>NSE medio</th><th>NSE alto</th></tr></thead><tbody>`;
+  let html=`<div class="cap">Cobertura de hogares por recorrido (manzanas Censo 2024 a ≤300 m del trazado). <b>Vel</b> = velocidad operacional (comercial, incluye paraderos · rojo lento / verde rápido). <b>Hog/km</b> = hogares ÷ extensión (eficiencia del trazado). NSE por escolaridad: <b style="color:#fb923c">bajo</b> ≤${nse.bajo} · <b style="color:#2dd4bf">alto</b> &gt;${nse.alto} años.</div>`;
+  html+=`<table><thead><tr><th class="l">Línea</th><th class="l">Recorrido</th><th>Ext<br>(km)</th><th>Vel<br>(km/h)</th><th>Hogares</th><th>Hog/km</th><th>NSE<br>bajo</th><th>NSE<br>medio</th><th>NSE<br>alto</th></tr></thead><tbody>`;
   let prev=null;
   rows.forEach(r=>{
     const tot=(r.hog_baj+r.hog_med+r.hog_alt)||1;
-    const nl=r.linea!==prev; const sep=nl?' style="border-top:2px solid var(--line2)"':'';
+    const nl=r.linea!==prev; const sep=nl?' class="grpsep"':'';
     html+=`<tr${sep}><td class="l grp">${nl?r.linea:''}</td><td class="l lh">${r.rec}</td>`+
       `<td ${heat(r.ext_km,mE,'148,163,184')}>${r.ext_km}</td>`+
+      `<td ${velBg(r.vel)}><b>${r.vel?r.vel:'—'}</b></td>`+
       `<td ${heat(r.hog,mH,'56,189,248')}>${NF.format(r.hog)}</td>`+
       `<td ${heat(r.hog_km,mHK,'52,211,153')}><b>${NF.format(r.hog_km)}</b></td>`+
       `<td ${seg(r.hog_baj,tot,'251,146,60')}>${NF.format(r.hog_baj)}</td>`+

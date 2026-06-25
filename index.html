@@ -12,8 +12,8 @@
 <!-- Rotación del mapa (Antofagasta es muy larga N-S; permite verla horizontal) -->
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
 <!-- Componentes y variables de tema existentes (kpi, ctab, litem, rank-row, cump-row, seg…) -->
-<link rel="stylesheet" href="assets/styles.css?v=67">
-<link rel="stylesheet" href="assets/shell.css?v=67">
+<link rel="stylesheet" href="assets/styles.css?v=68">
+<link rel="stylesheet" href="assets/shell.css?v=68">
 <!-- Aplica el tema guardado antes del paint (evita parpadeo) -->
 <script>try{var t=localStorage.getItem("afta-theme")||"dark";document.documentElement.dataset.theme=t;}catch(e){}</script>
 <!-- Tailwind (Play CDN, sin build). preflight off para no pisar los componentes existentes. -->
@@ -84,17 +84,20 @@ tailwind.config = {
   .map-narr:empty{display:none}
   .map-narr b{color:var(--tx);font-weight:600}
   /* Tabla de cobertura por línea/variante (heatmap para ver tendencias) */
-  .cover-table{margin-top:10px;max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:10px}
-  .cover-table table{border-collapse:collapse;width:100%;font-size:11px;font-family:var(--sans)}
-  .cover-table th,.cover-table td{padding:4px 8px;text-align:right;white-space:nowrap}
+  .cover-table{margin-top:12px;max-height:560px;overflow:auto;border:1px solid var(--line);border-radius:12px;
+    box-shadow:0 14px 34px -22px rgba(0,0,0,.55)}
+  .cover-table table{border-collapse:collapse;width:100%;font-size:12px;font-family:var(--sans)}
+  .cover-table th,.cover-table td{padding:6px 12px;text-align:right;white-space:nowrap}
   .cover-table thead th{position:sticky;top:0;background:var(--topbar);color:var(--muted);font-weight:600;
-    z-index:2;border-bottom:1px solid var(--line2);text-align:right}
+    z-index:2;border-bottom:1px solid var(--line2);text-align:right;line-height:1.15;font-size:11px;letter-spacing:.02em}
   .cover-table th.l,.cover-table td.l{text-align:left}
-  .cover-table tbody td{border-bottom:1px solid var(--line);font-family:var(--mono)}
-  .cover-table tbody tr:hover td{background:rgba(56,189,248,.06)}
-  .cover-table .lh{font-weight:700;color:var(--tx)}
-  .cover-table .cap{padding:6px 10px;font-size:10.5px;color:var(--dim);border-bottom:1px solid var(--line2)}
-  .cover-table .grp{color:var(--acc);font-weight:700}
+  .cover-table tbody td{border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12px}
+  .cover-table tbody tr.grpsep td{border-top:2px solid var(--line2)}
+  .cover-table tbody tr:hover td{outline:1px solid rgba(56,189,248,.35);outline-offset:-1px}
+  .cover-table .lh{font-weight:600;color:var(--tx);font-family:var(--sans)}
+  .cover-table .cap{padding:8px 12px;font-size:11px;line-height:1.5;color:var(--muted);
+    background:var(--panel);border-bottom:1px solid var(--line2)}
+  .cover-table .grp{color:var(--acc);font-weight:700;font-family:var(--mono);font-size:13px}
   /* Relato breve bajo cada widget/gráfico */
   .wnarr{font-size:11px;line-height:1.5;color:var(--muted);border-left:2px solid var(--line2);
     padding:1px 0 1px 9px;margin-top:9px}
@@ -296,7 +299,7 @@ tailwind.config = {
         <!-- MAPA HÉROE (2/3) -->
         <section class="widget xl:col-span-2 flex flex-col">
           <div class="widget-h">
-            <span class="ico ico-png"><img src="assets/brand/ic_bus.png?v=67" alt="" width="22" height="22"></span>
+            <span class="ico ico-png"><img src="assets/brand/ic_bus.png?v=68" alt="" width="22" height="22"></span>
             <div class="min-w-0">
               <h3 id="map-title" class="truncate">Mapa del sistema</h3>
               <span class="sub">recorrido oficial · velocidad map-matched · paraderos</span>
@@ -330,7 +333,7 @@ tailwind.config = {
         <div class="flex flex-col gap-4 xl:max-h-[680px] xl:overflow-y-auto thin-scroll xl:pr-1">
           <section class="widget">
             <div class="widget-h">
-              <span class="ico ico-png"><img src="assets/brand/ic_gauge.png?v=67" alt="" width="22" height="22"></span>
+              <span class="ico ico-png"><img src="assets/brand/ic_gauge.png?v=68" alt="" width="22" height="22"></span>
               <div><h3>Flota y velocidad</h3><span class="sub">por hora · días laborables</span></div>
             </div>
             <div class="widget-b"><div id="ch-hora" style="height:236px"></div><p id="hora-narr" class="wnarr"></p></div>
@@ -371,7 +374,7 @@ tailwind.config = {
       <!-- Cumplimiento de frecuencia -->
       <section class="widget">
         <div class="widget-h">
-          <span class="ico ico-png"><img src="assets/brand/ic_shieldcheck.png?v=67" alt="" width="22" height="22"></span>
+          <span class="ico ico-png"><img src="assets/brand/ic_shieldcheck.png?v=68" alt="" width="22" height="22"></span>
           <div><h3>Cumplimiento de frecuencia</h3><span class="sub">programado (GTFS) vs observado (GPS)</span></div>
         </div>
         <div class="widget-b"><div id="cump-box"></div><p id="cump-narr" class="wnarr"></p></div>
@@ -380,7 +383,7 @@ tailwind.config = {
       <!-- Cumplimiento semanal por variable (solo con línea elegida) -->
       <section class="widget cump-sem" id="cump-sem-card" style="display:none">
         <div class="widget-h">
-          <span class="ico ico-png"><img src="assets/brand/ic_shield.png?v=67" alt="" width="22" height="22"></span>
+          <span class="ico ico-png"><img src="assets/brand/ic_shield.png?v=68" alt="" width="22" height="22"></span>
           <div class="min-w-0"><h3>Cumplimiento semanal por variable exigida</h3><span class="sub">evolución semana a semana</span></div>
           <div class="cs-controls ml-auto">
             <div class="seg" id="cs-dia"></div>
@@ -509,7 +512,7 @@ tailwind.config = {
      style="position:fixed;right:8px;bottom:6px;z-index:1200;font:500 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim,#64748b);background:rgba(10,15,28,.55);border:1px solid var(--line,#1e293b);border-radius:6px;padding:3px 7px;backdrop-filter:blur(6px);pointer-events:none;opacity:.78">act. —</div>
 
 <script src="assets/echarts.min.js"></script>
-<script src="assets/app_shell.js?v=67"></script>
+<script src="assets/app_shell.js?v=68"></script>
 <script>
   /* Sidebar colapsable + recálculo de mapa/charts al cambiar el ancho */
   (function(){
