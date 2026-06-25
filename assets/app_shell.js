@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=58`).then(r=>r.json());
-const BUILD = "afta-v9";
+const J = n => fetch(`data/${n}?v=59`).then(r=>r.json());
+const BUILD = "afta-v10";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -14,6 +14,7 @@ let VFREQ=null, VTREND=null, curVar=null, lastFitScope=null, TLIN={}, PESP={stop
 let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", cmpA:null, cmpB:null};
 let chart, csChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = ""; // Antofagasta: sin captura GTFS-RT aún → modo vivo deshabilitado (degrada)
+const BEARING_H = 270;  // vista horizontal: ciudad acostada (norte izq, sur der) y mar (oeste) abajo
 const MAP_MODES = [["recorridos","Recorridos"],["cover","Cobertura"],["trans","Transbordo"],["wait","Espera"],["conges","Congestión"],["bunch","Bunching"],["det","Detenciones"],["term","Terminales"],["salud","Salud"],["edu","Educación"],["nse","NSE"]];
 const PEAK_H = [7,8,9,17,18,19];
 
@@ -241,7 +242,8 @@ function renderHora(cell){
 
 function ensureMap(){
   if(lmap) return;
-  lmap = L.map("lmap",{center:[-23.65,-70.40],zoom:12,zoomControl:true});
+  lmap = L.map("lmap",{center:[-23.65,-70.40],zoom:12,zoomControl:true,
+    rotate:true, rotateControl:false, touchRotate:false, bearing:0});
   // Base OSCURA (centro de mando) por defecto: CARTO Dark Matter. Sobre ella resaltan
   // el recorrido coloreado por velocidad y los paraderos (datos "neón").
   const oscuro = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{maxZoom:20,subdomains:"abcd",attribution:"© OSM © CARTO"}).addTo(lmap);
@@ -249,6 +251,25 @@ function ensureMap(){
   const calles = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{maxZoom:20,subdomains:"abcd",attribution:"© OSM © CARTO"});
   const etiquetas = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",{maxZoom:19});
   L.control.layers({"Oscuro":oscuro,"Satélite":sat,"Calles":calles},{"Vías y etiquetas":etiquetas},{collapsed:true,position:"topright"}).addTo(lmap);
+  // Botón de rotación: alterna entre vista normal (N-S) y horizontal (ciudad acostada, mar abajo)
+  if(typeof lmap.setBearing === "function"){
+    const RotBtn = L.Control.extend({ options:{position:"topright"},
+      onAdd:function(){
+        const d=L.DomUtil.create("div","leaflet-bar");
+        const a=L.DomUtil.create("a","",d);
+        a.href="#"; a.title="Girar el mapa: ver Antofagasta horizontal (mar abajo) / vertical (norte arriba)";
+        a.innerHTML="⟲"; a.style.cssText="font-size:17px;font-weight:700;line-height:26px";
+        L.DomEvent.on(a,"click",L.DomEvent.stop).on(a,"click",()=>{
+          const cur=Math.round(lmap.getBearing()||0);
+          const nb=(cur===0)?BEARING_H:0;
+          lmap.setBearing(nb);
+          a.style.color=nb!==0?"#22d3ee":"";
+          a.title = nb!==0 ? "Volver a vista normal (norte arriba)" : "Girar el mapa: ver Antofagasta horizontal (mar abajo)";
+        });
+        return d;
+      }});
+    new RotBtn().addTo(lmap);
+  }
   comunaLayer = L.layerGroup().addTo(lmap);
   routeLayer = L.layerGroup().addTo(lmap);
   stopLayer = L.layerGroup().addTo(lmap);
