@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=76`).then(r=>r.json());
-const BUILD = "afta-v27";
+const J = n => fetch(`data/${n}?v=77`).then(r=>r.json());
+const BUILD = "afta-v28";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -269,6 +269,7 @@ function render(){
   renderSalidas();
   renderVelDist();
   renderMapa();
+  renderLineaKpis();
   renderCoverTable();
   renderRanking();
   renderCump();
@@ -863,6 +864,41 @@ function drawOferta(){
       .bindTooltip(`<b>Oferta</b> (${lbl}) · ${p.cob_nl||0} líneas<br>programado: <b>${bp}</b> bus/h · ${Math.round(bp*27)} pers/h<br>observado (GPS): <b>${bo}</b> bus/h`,{sticky:true}).addTo(coverLayer));
   });
   setCoverLegend("oferta");
+}
+function renderLineaKpis(){
+  const el=$("linea-kpis"); if(!el) return;
+  const show = state.linea!=="TODAS" && state.vista==="normal" && state.mapMode==="cover" && COB && COB.features;
+  if(!show){ el.style.display="none"; el.innerHTML=""; return; }
+  // 1) hogares cubiertos + segmentación NSE sobre manzanas en el buffer de la línea
+  const cm = coveredManzanas(state.linea);
+  let hog=0, hbaj=0, hmed=0, halt=0, hsn=0;
+  cm.forEach(i=>{ const p=COB.features[i].properties, h=p.hog||0;
+    hog+=h;
+    if(p.nse===0) hbaj+=h; else if(p.nse===1) hmed+=h; else if(p.nse===2) halt+=h; else hsn+=h;
+  });
+  // 2) extensión y hog/km desde CLINE (fila rec==linea o el más cubierto)
+  const row = (CLINE&&CLINE.lineas||[]).find(r=>r.linea===state.linea && r.rec===state.linea)
+              || (CLINE&&CLINE.lineas||[]).find(r=>r.linea===state.linea);
+  const ext = row ? row.ext_km : null;
+  const hogkm = ext ? Math.round(hog/ext) : null;
+  // 3) ciclos/bus/día = (salidas L) / flota_total / 2
+  const flota = T&&T.cells&&T.cells["TODAS|"+state.linea]&&T.cells["TODAS|"+state.linea].kpi&&T.cells["TODAS|"+state.linea].kpi.flota_total || null;
+  const salL = SALT&&SALT.por_linea&&SALT.por_linea[state.linea]&&SALT.por_linea[state.linea].L || null;
+  const totSal = salL ? salL.reduce((a,b)=>a+b,0) : null;
+  const ciclos = (flota && totSal) ? (totSal/flota/2) : null;
+  const tcMin = T&&T.cells&&T.cells["TODAS|"+state.linea]&&T.cells["TODAS|"+state.linea].kpi&&T.cells["TODAS|"+state.linea].kpi.tc || null;
+  const nse = (COB.resumen&&COB.resumen.cob_est&&COB.resumen.cob_est.nse_terciles)||{};
+  const pct = n => hog ? Math.round(100*n/hog) : 0;
+  const card = (cls,lab,val,sub)=>`<div class="lk ${cls}"><div class="lab">${lab}</div><div class="val">${val}</div><div class="sub">${sub}</div></div>`;
+  el.style.display="grid";
+  el.innerHTML = [
+    card("b-tot","🏠 Hogares cubiertos", NF.format(Math.round(hog)), `${cm.size} manzanas · buffer 300 m`),
+    card("b-bajo","NSE bajo", NF.format(Math.round(hbaj)), `${pct(hbaj)}% · ≤ ${nse.bajo??"—"} años escolaridad`),
+    card("b-med","NSE medio", NF.format(Math.round(hmed)), `${pct(hmed)}% · entre ${nse.bajo??"—"} y ${nse.alto??"—"}`),
+    card("b-alto","NSE alto", NF.format(Math.round(halt)), `${pct(halt)}% · > ${nse.alto??"—"} años`),
+    card("b-eff","📏 Hog. por km", hogkm!=null?NF.format(hogkm):"—", `extensión ${ext??"—"} km (ida)`),
+    card("b-cic","🔁 Ciclos/bus/día", ciclos!=null?ciclos.toFixed(1):"—", tcMin?`tiempo de ciclo ${Math.round(tcMin)} min · ${flota||"—"} buses`:`—`),
+  ].join("");
 }
 function renderCoverTable(){
   const el=$("cover-table"); if(!el) return;
