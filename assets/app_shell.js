@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=75`).then(r=>r.json());
-const BUILD = "afta-v26";
+const J = n => fetch(`data/${n}?v=76`).then(r=>r.json());
+const BUILD = "afta-v27";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -14,7 +14,33 @@ let VFREQ=null, VTREND=null, curVar=null, lastFitScope=null, TLIN={}, PESP={stop
 let PDWELL={paraderos:[],reparto:{}};
 let CLINE={lineas:[],nse:{}};
 let SALT=null, salidasChart=null;
-let VD=null, vdChart=null;
+let VD=null, vdChart=null, vdMarker=null;
+function _haversineM(a,b){ const R=6371000, la1=a[0]*Math.PI/180, la2=b[0]*Math.PI/180, dla=(b[0]-a[0])*Math.PI/180, dlo=(b[1]-a[1])*Math.PI/180;
+  const h=Math.sin(dla/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dlo/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
+function lineaShapePrincipal(linea, s){
+  const segs = (GEOM&&GEOM[linea]||[]).filter(x=>+x.s===+s); if(!segs.length) return null;
+  let cand = segs.filter(x=>String(x.rec)===String(linea));
+  if(!cand.length) cand = segs.slice();
+  cand.sort((a,b)=>b.p.length - a.p.length);
+  return cand[0].p;
+}
+function lineaPosAtKm(linea, s, km){
+  const pts = lineaShapePrincipal(linea, s); if(!pts||pts.length<2) return null;
+  let acc=0, target=km*1000;
+  if(target<=0) return pts[0];
+  for(let i=0;i<pts.length-1;i++){ const d=_haversineM(pts[i],pts[i+1]);
+    if(acc+d >= target){ const t=(target-acc)/d; return [pts[i][0]+(pts[i+1][0]-pts[i][0])*t, pts[i][1]+(pts[i+1][1]-pts[i][1])*t]; }
+    acc += d; }
+  return pts[pts.length-1];
+}
+function setVdMarker(latlng, label){
+  if(!lmap) return;
+  if(vdMarker){ try{ lmap.removeLayer(vdMarker); }catch(e){} vdMarker=null; }
+  if(!latlng) return;
+  vdMarker = L.circleMarker(latlng, {radius:9, color:"#0b1220", weight:2.5, fillColor:"#fbbf24", fillOpacity:.95, pane:"markerPane"});
+  if(label) vdMarker.bindTooltip(label, {permanent:true, direction:"top", offset:[0,-8], className:"vd-tip"});
+  vdMarker.addTo(lmap);
+}
 let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", congTipo:"real", detTipo:"cong", salDia:"L", salSm:0, vdDia:"L", vdPer:"agg", vdSen:"amb", vdSm:0, cmpA:null, cmpB:null};
 let chart, csChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = ""; // Antofagasta: sin captura GTFS-RT aún → modo vivo deshabilitado (degrada)
@@ -419,6 +445,17 @@ function renderVelDist(){
     series
   },true);
   setTimeout(()=>vdChart.resize(),60);
+  // Indicador en el mapa: marcador que sigue el cursor del gráfico
+  vdChart.off("updateAxisPointer"); vdChart.off("hideTip");
+  vdChart.on("updateAxisPointer", function(p){
+    const a = p && p.axesInfo && p.axesInfo[0]; if(!a || a.value==null){ setVdMarker(null); return; }
+    const km = +a.value;
+    const s = state.vdSen==="amb" ? "0" : state.vdSen;       // si "Ambos", marca sobre la ida
+    const pos = lineaPosAtKm(state.linea, +s, km); if(!pos) return;
+    setVdMarker(pos, `km ${km.toFixed(1)} · ${s==="0"?"Ida":"Regreso"}`);
+  });
+  vdChart.on("hideTip", ()=>setVdMarker(null));
+  elc.onmouseleave = ()=>setVdMarker(null);
   const all = ida.concat(reg).map(p=>p[1]);
   const m = all.length?(all.reduce((a,b)=>a+b,0)/all.length):0, mn = all.length?Math.min(...all):0, mx = all.length?Math.max(...all):0;
   const senLbl = sen==="amb"?"Ida y Regreso":(sen==="0"?"Ida":"Regreso");
@@ -971,6 +1008,7 @@ function setSpeedLegend(on){
 }
 function renderMapa(){
   ensureMap();
+  setVdMarker(null);
   comunaLayer.clearLayers(); routeLayer.clearLayers(); stopLayer.clearLayers();
   setTimeout(()=>lmap.invalidateSize(),120);
   // límites comunales: al elegir comuna, enfocar en ella y atenuar fuerte las vecinas
