@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=70`).then(r=>r.json());
-const BUILD = "afta-v21";
+const J = n => fetch(`data/${n}?v=71`).then(r=>r.json());
+const BUILD = "afta-v22";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -295,7 +295,10 @@ function renderSalidas(){
   if(i0<0) i0=0; if(i1<0) i1=SALT.bins.length-1;
   const bins=SALT.bins.slice(i0,i1+1);
   const lab=bins.map(m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"));
-  const S = SALT.salidas.L ? SALT.salidas : {L:SALT.salidas};   // compat estructura vieja (array plano)
+  // Si hay línea elegida y existen series por línea, usar esa; si no, sistema completo.
+  const PL = SALT.por_linea && SALT.por_linea[state.linea];
+  const Sraw = (state.linea!=="TODAS" && PL) ? PL : SALT.salidas;
+  const S = Sraw.L ? Sraw : {L:Sraw};   // compat estructura vieja (array plano)
   const sl = arr => (arr||[]).slice(i0,i1+1);
   const DEF = {L:["Laboral","#fb923c","rgba(251,146,60,.16)"], S:["Sábado","#38bdf8","rgba(56,189,248,.14)"], D:["Domingo","#a78bfa","rgba(167,139,250,.14)"]};
   const all = state.salDia==="all";
