@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=73`).then(r=>r.json());
-const BUILD = "afta-v24";
+const J = n => fetch(`data/${n}?v=74`).then(r=>r.json());
+const BUILD = "afta-v25";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -15,7 +15,7 @@ let PDWELL={paraderos:[],reparto:{}};
 let CLINE={lineas:[],nse:{}};
 let SALT=null, salidasChart=null;
 let VD=null, vdChart=null;
-let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", congTipo:"real", detTipo:"cong", salDia:"L", vdDia:"L", vdPer:"agg", cmpA:null, cmpB:null};
+let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", congTipo:"real", detTipo:"cong", salDia:"L", vdDia:"L", vdPer:"agg", vdSen:"amb", vdSm:0, cmpA:null, cmpB:null};
 let chart, csChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = ""; // Antofagasta: sin captura GTFS-RT aún → modo vivo deshabilitado (degrada)
 const BEARING_H = 270;  // vista horizontal: ciudad acostada (norte izq, sur der) y mar (oeste) abajo
@@ -140,6 +140,22 @@ function buildVdPer(){
     PERIODOS.map(([k,l])=>`<b data-p="${k}" class="${state.vdPer===k?"on":""}">${l}</b>`).join("")+`</div>`;
   box.querySelectorAll("b").forEach(el=>el.onclick=()=>{ state.vdPer=el.dataset.p;
     box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.p===state.vdPer));
+    renderVelDist(); });
+}
+function buildVdSen(){
+  const box=$("vd-sen-sel"); if(!box) return;
+  box.innerHTML = `<span class="lbl">Sentido</span><div class="seg">`+
+    [["amb","Ambos"],["0","Ida"],["1","Regreso"]].map(([k,l])=>`<b data-p="${k}" class="${state.vdSen===k?"on":""}">${l}</b>`).join("")+`</div>`;
+  box.querySelectorAll("b").forEach(el=>el.onclick=()=>{ state.vdSen=el.dataset.p;
+    box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.p===state.vdSen));
+    renderVelDist(); });
+}
+function buildVdSm(){
+  const box=$("vd-sm-sel"); if(!box) return;
+  box.innerHTML = `<span class="lbl">Suavizar</span><div class="seg">`+
+    [[0,"Sin"],[3,"3"],[5,"5"],[7,"7"]].map(([k,l])=>`<b data-p="${k}" class="${String(state.vdSm)===String(k)?"on":""}">${l}</b>`).join("")+`</div>`;
+  box.querySelectorAll("b").forEach(el=>el.onclick=()=>{ state.vdSm=+el.dataset.p;
+    box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",+b.dataset.p===state.vdSm));
     renderVelDist(); });
 }
 function buildSaldia(){
@@ -358,33 +374,48 @@ function renderVelDist(){
   const elc=$("ch-veldist"); if(!elc) return;
   if(!vdChart) vdChart=echarts.init(elc);
   const data = VD.lineas[state.linea];
-  const per = state.vdPer, dia = state.vdDia;
+  const per = state.vdPer, dia = state.vdDia, sen = state.vdSen, sm = +state.vdSm||0;
   const ser = (data.serie&&data.serie[dia]&&data.serie[dia][per])||{};
+  // media móvil centrada (ignora nulls); preserva el array original con nulls donde corresponda.
+  const smooth = (arr, w) => {
+    if(!w || w<2) return arr;
+    const half = Math.floor(w/2);
+    return arr.map((p,i)=>{
+      let s=0,n=0; for(let j=Math.max(0,i-half); j<=Math.min(arr.length-1,i+half); j++){ const v=arr[j]&&arr[j].v; if(v!=null){ s+=v; n++; } }
+      return {x:p.x, v: n? +(s/n).toFixed(1) : null};
+    });
+  };
   const toPairs = arr => (arr||[]).filter(p=>p.v!=null).map(p=>[p.x,p.v]);
-  const ida = toPairs(ser["0"]), reg = toPairs(ser["1"]);
+  const showIda = sen==="amb" || sen==="0";
+  const showReg = sen==="amb" || sen==="1";
+  const ida = showIda ? toPairs(smooth(ser["0"]||[], sm)) : [];
+  const reg = showReg ? toPairs(smooth(ser["1"]||[], sm)) : [];
   const th = TH();
   $("vd-title").textContent = `Velocidad a lo largo del ciclo · Línea ${state.linea}`;
+  const legendData = [...(showIda?["Ida"]:[]), ...(showReg?["Regreso"]:[])];
+  const series = [];
+  if(showIda) series.push({name:"Ida",type:"line",data:ida,smooth:sm>0,symbol:"none",connectNulls:true,lineStyle:{width:2,color:"#22d3ee"}});
+  if(showReg) series.push({name:"Regreso",type:"line",data:reg,smooth:sm>0,symbol:"none",connectNulls:true,lineStyle:{width:2,color:"#fb923c"}});
   vdChart.setOption({
     textStyle:{fontFamily:"Inter,sans-serif",color:th.tx},
     grid:{left:42,right:14,top:30,bottom:34,containLabel:true},
-    legend:{data:["Ida","Regreso"],textStyle:{color:th.mut,fontSize:10},top:0,right:0,itemWidth:14,itemHeight:8},
+    legend:{data:legendData,textStyle:{color:th.mut,fontSize:10},top:0,right:0,itemWidth:14,itemHeight:8},
     tooltip:{trigger:"axis",backgroundColor:th.tip,borderColor:th.tipB,textStyle:{color:th.tx},
       formatter:p=>{let s=`km ${p[0].axisValue.toFixed?p[0].axisValue.toFixed(1):p[0].axisValue}`; p.forEach(x=>s+=`<br>${x.marker}${x.seriesName}: <b>${x.value[1]}</b> km/h`); return s;}},
     xAxis:{type:"value",name:"km del ciclo",nameTextStyle:{color:th.mut,fontSize:10},nameLocation:"middle",nameGap:22,
       axisLabel:{color:th.mut,fontSize:10},splitLine:{lineStyle:{color:th.grid}}},
     yAxis:{type:"value",name:"km/h",nameTextStyle:{color:th.mut,fontSize:10},nameGap:6,min:0,max:50,
       axisLabel:{color:th.mut,fontSize:10},splitLine:{lineStyle:{color:th.grid}}},
-    series:[
-      {name:"Ida",type:"line",data:ida,smooth:true,symbol:"none",connectNulls:true,lineStyle:{width:2,color:"#22d3ee"}},
-      {name:"Regreso",type:"line",data:reg,smooth:true,symbol:"none",connectNulls:true,lineStyle:{width:2,color:"#fb923c"}}
-    ]
+    series
   },true);
   setTimeout(()=>vdChart.resize(),60);
   const all = ida.concat(reg).map(p=>p[1]);
   const m = all.length?(all.reduce((a,b)=>a+b,0)/all.length):0, mn = all.length?Math.min(...all):0, mx = all.length?Math.max(...all):0;
+  const senLbl = sen==="amb"?"Ida y Regreso":(sen==="0"?"Ida":"Regreso");
+  const smLbl = sm>0 ? ` · suavizado media móvil ${sm}` : "";
   $("vd-narr").innerHTML = all.length
-    ? `<b>Velocidad real</b> a lo largo del ciclo de la línea ${state.linea} (${dia==="L"?"Laboral":dia==="S"?"Sábado":"Domingo"} · ${periodoLbl(per)}). Media ${m.toFixed(1)} km/h · mínimo ${mn.toFixed(1)} · máximo ${mx.toFixed(1)} km/h. Los valles muestran dónde se ralentiza el bus a lo largo del recorrido.`
-    : `Sin datos suficientes para la combinación elegida (línea ${state.linea}, ${dia}, ${periodoLbl(per)}).`;
+    ? `<b>Velocidad real</b> a lo largo del ciclo de la línea ${state.linea} (${dia==="L"?"Laboral":dia==="S"?"Sábado":"Domingo"} · ${periodoLbl(per)} · ${senLbl}${smLbl}). Media ${m.toFixed(1)} km/h · mínimo ${mn.toFixed(1)} · máximo ${mx.toFixed(1)} km/h. Los valles muestran dónde se ralentiza el bus a lo largo del recorrido.`
+    : `Sin datos suficientes para la combinación elegida (línea ${state.linea}, ${dia}, ${periodoLbl(per)}, ${senLbl}).`;
 }
 function ensureMap(){
   if(lmap) return;
@@ -1636,7 +1667,7 @@ function renderEvolucion(){
       .then(([vf,vt])=>{ VFREQ=vf; VTREND=vt; renderVarFreq(); });
     J("terminales_linea.json").then(d=>{ TLIN=d; if(state.linea!=="TODAS") renderMapa(); }).catch(()=>{});
     buildMapModes();
-    buildPeriodo(); buildPurpose(); buildSentido(); buildCongtipo(); buildDettipo(); buildSaldia(); buildVdDia(); buildVdPer();
+    buildPeriodo(); buildPurpose(); buildSentido(); buildCongtipo(); buildDettipo(); buildSaldia(); buildVdDia(); buildVdPer(); buildVdSen(); buildVdSm();
     buildComunaTabs();
     buildLineaList();
     $("linea-search").addEventListener("input", e=>buildLineaList(e.target.value));

@@ -1,1 +1,1 @@
-{"build":"afta-v24","ciudad":"Antofagasta","periodo":"2025-06","base":"corregida (map-matching)","actualizado":"2026-06-27 14:41","nota":"alturas de graficos ajustadas (columna derecha mas alta, leyendas no pisan)","generado":"2026-06-27"}
+{"build":"afta-v25","ciudad":"Antofagasta","periodo":"2025-06","base":"corregida (map-matching)","actualizado":"2026-06-27 14:49","nota":"vel ciclo: selector sentido (ida/regreso/ambos) + suavizado media movil","generado":"2026-06-27"}
