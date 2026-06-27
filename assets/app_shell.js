@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=72`).then(r=>r.json());
-const BUILD = "afta-v23";
+const J = n => fetch(`data/${n}?v=73`).then(r=>r.json());
+const BUILD = "afta-v24";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -279,8 +279,8 @@ function renderHora(cell){
   const th = TH();
   chart.setOption({
     textStyle:{fontFamily:"Inter,sans-serif",color:th.tx},
-    grid:{left:42,right:46,top:34,bottom:28,containLabel:true},
-    legend:{data:["Flota (buses)","Velocidad"],textStyle:{color:th.mut},top:0,right:0},
+    grid:{left:42,right:46,top:42,bottom:28,containLabel:true},
+    legend:{data:["Flota (buses)","Velocidad"],textStyle:{color:th.mut,fontSize:11},top:4,right:6,itemWidth:14,itemHeight:8},
     tooltip:{trigger:"axis",backgroundColor:th.tip,borderColor:th.tipB,textStyle:{color:th.tx},
       formatter:p=>{const i=p[0].dataIndex,x=h[i]||{};return `${HORAS[i]}<br>Flota: <b>${fmt1(x.b)}</b> buses<br>Velocidad: <b>${fmt1(x.v)}</b> km/h<br>Detenido: ${fmt1(x.d)}%`;}},
     xAxis:{type:"category",data:HORAS,axisLabel:{color:th.mut,fontSize:10},axisLine:{lineStyle:{color:th.axis}}},
