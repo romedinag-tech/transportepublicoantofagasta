@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=74`).then(r=>r.json());
-const BUILD = "afta-v25";
+const J = n => fetch(`data/${n}?v=75`).then(r=>r.json());
+const BUILD = "afta-v26";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -15,7 +15,7 @@ let PDWELL={paraderos:[],reparto:{}};
 let CLINE={lineas:[],nse:{}};
 let SALT=null, salidasChart=null;
 let VD=null, vdChart=null;
-let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", congTipo:"real", detTipo:"cong", salDia:"L", vdDia:"L", vdPer:"agg", vdSen:"amb", vdSm:0, cmpA:null, cmpB:null};
+let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", congTipo:"real", detTipo:"cong", salDia:"L", salSm:0, vdDia:"L", vdPer:"agg", vdSen:"amb", vdSm:0, cmpA:null, cmpB:null};
 let chart, csChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = ""; // Antofagasta: sin captura GTFS-RT aún → modo vivo deshabilitado (degrada)
 const BEARING_H = 270;  // vista horizontal: ciudad acostada (norte izq, sur der) y mar (oeste) abajo
@@ -125,6 +125,14 @@ function buildDettipo(){
   box.querySelectorAll("b").forEach(el=>el.onclick=()=>{ state.detTipo=el.dataset.p;
     box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.p===state.detTipo));
     if(state.mapMode==="det") render(); });
+}
+function buildSalSm(){
+  const box=$("salsm-sel"); if(!box) return;
+  box.innerHTML = `<span class="lbl">Suavizar</span><div class="seg">`+
+    [[0,"Sin"],[3,"15m"],[5,"25m"],[7,"35m"]].map(([k,l])=>`<b data-p="${k}" class="${+state.salSm===k?"on":""}">${l}</b>`).join("")+`</div>`;
+  box.querySelectorAll("b").forEach(el=>el.onclick=()=>{ state.salSm=+el.dataset.p;
+    box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",+b.dataset.p===state.salSm));
+    renderSalidas(); });
 }
 function buildVdDia(){
   const box=$("vd-dia-sel"); if(!box) return;
@@ -333,7 +341,9 @@ function renderSalidas(){
   const PL = SALT.por_linea && SALT.por_linea[state.linea];
   const Sraw = (state.linea!=="TODAS" && PL) ? PL : SALT.salidas;
   const S = Sraw.L ? Sraw : {L:Sraw};   // compat estructura vieja (array plano)
-  const sl = arr => (arr||[]).slice(i0,i1+1);
+  const smArr = (arr,w)=>{ if(!w||w<2) return arr; const half=Math.floor(w/2);
+    return arr.map((v,i)=>{ let s=0,n=0; for(let j=Math.max(0,i-half); j<=Math.min(arr.length-1,i+half); j++){ const x=arr[j]; if(typeof x==="number"){ s+=x; n++; } } return n? +(s/n).toFixed(2):0; }); };
+  const sl = arr => smArr((arr||[]).slice(i0,i1+1), +state.salSm||0);
   const DEF = {L:["Laboral","#fb923c","rgba(251,146,60,.16)"], S:["Sábado","#38bdf8","rgba(56,189,248,.14)"], D:["Domingo","#a78bfa","rgba(167,139,250,.14)"]};
   const all = state.salDia==="all";
   const tipos = all ? ["L","S","D"] : [state.salDia];
@@ -1667,7 +1677,7 @@ function renderEvolucion(){
       .then(([vf,vt])=>{ VFREQ=vf; VTREND=vt; renderVarFreq(); });
     J("terminales_linea.json").then(d=>{ TLIN=d; if(state.linea!=="TODAS") renderMapa(); }).catch(()=>{});
     buildMapModes();
-    buildPeriodo(); buildPurpose(); buildSentido(); buildCongtipo(); buildDettipo(); buildSaldia(); buildVdDia(); buildVdPer(); buildVdSen(); buildVdSm();
+    buildPeriodo(); buildPurpose(); buildSentido(); buildCongtipo(); buildDettipo(); buildSaldia(); buildSalSm(); buildVdDia(); buildVdPer(); buildVdSen(); buildVdSm();
     buildComunaTabs();
     buildLineaList();
     $("linea-search").addEventListener("input", e=>buildLineaList(e.target.value));
