@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=84`).then(r=>r.json());
-const BUILD = "afta-v35";
+const J = n => fetch(`data/${n}?v=85`).then(r=>r.json());
+const BUILD = "afta-v36";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -15,7 +15,7 @@ let PDWELL={paraderos:[],reparto:{}};
 let CLINE={lineas:[],nse:{}};
 let SALT=null, salidasChart=null;
 let VD=null, vdChart=null, vdMarker=null;
-let BUNCH=null, BUNCHA=null;
+let BUNCH=null, BUNCHA=null, DETP=null;
 // segmentos del shape principal de una línea-sentido, etiquetados con su bin de bunching
 let _shapeBinsCache={};
 function shapePrincipalLS(lb, s){
@@ -139,7 +139,7 @@ function buildPeriodo(){
     PERIODOS.map(([k,l])=>`<b data-p="${k}" class="${state.periodo===k?"on":""}">${l}</b>`).join("")+`</div>`;
   box.querySelectorAll("b").forEach(el=>el.onclick=()=>{ state.periodo=el.dataset.p;
     box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.p===state.periodo));
-    if(state.mapMode==="conges" || state.mapMode==="oferta" || state.mapMode==="bunch" || state.vista==="ranking") render(); });
+    if(["conges","oferta","bunch","det"].includes(state.mapMode) || state.vista==="ranking") render(); });
 }
 function buildPurpose(){
   const box=$("purpose-sel"); if(!box) return;
@@ -155,7 +155,7 @@ function buildSentido(){
     SENTIDOS.map(([k,l])=>`<b data-p="${k}" class="${state.sentido===k?"on":""}">${l}</b>`).join("")+`</div>`;
   box.querySelectorAll("b").forEach(el=>el.onclick=()=>{ state.sentido=el.dataset.p;
     box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.p===state.sentido));
-    if(["conges","bunch"].includes(state.mapMode)) render(); });
+    if(["conges","bunch","cover","det"].includes(state.mapMode)) render(); });
 }
 function buildCongtipo(){
   const box=$("congtipo-sel"); if(!box) return;
@@ -247,12 +247,12 @@ function render(){
     e.classList.toggle("active", on);
   });
   document.querySelectorAll(".litem").forEach(e=>e.classList.toggle("active", e.dataset.l===state.linea && state.vista==="normal"));
-  const periodoRelevante = state.vista==="ranking" || (state.vista==="normal" && (state.mapMode==="conges"||state.mapMode==="oferta"||state.mapMode==="bunch"));
+  const periodoRelevante = state.vista==="ranking" || (state.vista==="normal" && ["conges","oferta","bunch","det"].includes(state.mapMode));
   $("periodo-sel").style.display = periodoRelevante ? "flex" : "none";
   const purposeRel = state.vista==="normal" && state.linea==="TODAS" && ["cover","trans","wait"].includes(state.mapMode);
   if($("purpose-sel")) $("purpose-sel").style.display = purposeRel ? "flex" : "none";
   // Sentido (ida/regreso) relevante en modos de eje: congestión y bunching.
-  const sentidoRel = state.vista==="normal" && ["conges","bunch"].includes(state.mapMode);
+  const sentidoRel = state.vista==="normal" && (["conges","bunch"].includes(state.mapMode) || (state.linea!=="TODAS" && ["cover","det"].includes(state.mapMode)));
   if($("sentido-sel")) $("sentido-sel").style.display = sentidoRel ? "flex" : "none";
   // Tipo de velocidad (movimiento/real) solo en Congestión
   const congtipoRel = state.vista==="normal" && state.mapMode==="conges";
@@ -657,11 +657,12 @@ const toM = (la,lo)=>[(lo-_LON0)*_MX,(la-_LAT0)*_MY];
 function _ptSeg(px,py,ax,ay,bx,by){ const dx=bx-ax,dy=by-ay,L2=dx*dx+dy*dy||1e-9;
   let t=((px-ax)*dx+(py-ay)*dy)/L2; t=t<0?0:t>1?1:t; const fx=ax+t*dx,fy=ay+t*dy; return Math.hypot(px-fx,py-fy); }
 let _covCache={};
-function coveredManzanas(linea, R=300){
-  const key=linea+"|"+R; if(_covCache[key]) return _covCache[key];
+function coveredManzanas(linea, R=300, sentido=null){      // sentido=null|"amb": ambos · "0"|"1": filtra
+  const key=linea+"|"+R+"|"+(sentido||"amb"); if(_covCache[key]) return _covCache[key];
   const set=new Set(); if(!COB||!COB.features||!GEOM[linea]) return _covCache[key]=set;
   let mnLa=9,mxLa=-9,mnLo=9,mxLo=-9; const segs=[];
-  (GEOM[linea]||[]).forEach(s=>{ const p=s.p; for(let i=0;i<p.length-1;i++){ const a=toM(p[i][0],p[i][1]),b=toM(p[i+1][0],p[i+1][1]); segs.push([a[0],a[1],b[0],b[1]]); }
+  const shapes = (GEOM[linea]||[]).filter(s => !sentido || sentido==="amb" || String(s.s)===String(sentido));
+  shapes.forEach(s=>{ const p=s.p; for(let i=0;i<p.length-1;i++){ const a=toM(p[i][0],p[i][1]),b=toM(p[i+1][0],p[i+1][1]); segs.push([a[0],a[1],b[0],b[1]]); }
     p.forEach(pt=>{ mnLa=Math.min(mnLa,pt[0]);mxLa=Math.max(mxLa,pt[0]);mnLo=Math.min(mnLo,pt[1]);mxLo=Math.max(mxLo,pt[1]); }); });
   const pad=0.005;
   COB.features.forEach((f,idx)=>{ const p=f.properties, la=p.cy, lo=p.cx;
@@ -942,16 +943,20 @@ function lineaFreqPeriodo(linea, per){     // buses/h observados de la línea en
   hrs.forEach(h=>{ const i=HC.indexOf(h); if(i>=0&&arr[i]>0){ s+=arr[i]; k++; } });
   return k?Math.round(s/k*10)/10:0;
 }
+const nseColors = {0:"#fb923c", 1:"#94a3b8", 2:"#2dd4bf"};   // bajo / medio / alto
+const nseLabel  = n => n===0?"NSE bajo":n===1?"NSE medio":n===2?"NSE alto":"sin dato NSE";
 function drawCobertura(){
   if(!coverLayer) return; coverLayer.clearLayers();
   if(!COB||!COB.features){ setCoverLegend("cover"); return; }
-  const lset = state.linea!=="TODAS" ? coveredManzanas(state.linea) : null;
+  const sen = (state.linea!=="TODAS" && state.sentido!=="amb") ? state.sentido : null;
+  const lset = state.linea!=="TODAS" ? coveredManzanas(state.linea, 300, sen||"amb") : null;
   COB.features.forEach((f,idx)=>{ const p=f.properties; if(!inComuna(p.cy,p.cx)) return;
     if(lset && !lset.has(idx)) return;
-    const col = lset ? "#22d3ee" : coberColor(p.cob_est);   // línea: manzanas que cubre (cian) · sistema: % cubierto
-    mzRings(f).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:col,fillOpacity:lset?.5:.55})
+    // En vista de línea: pintar por NSE de la manzana. En sistema: por cobertura estática.
+    const col = lset ? (nseColors[p.nse] || "#475569") : coberColor(p.cob_est);
+    mzRings(f).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:col,fillOpacity:lset?.6:.55})
       .bindTooltip(lset
-        ? `<b>Manzana</b> · ${fmt(p.hog)} hogares<br>cubierta por la línea ${state.linea} (≤300 m)`
+        ? `<b>Manzana</b> · ${fmt(p.hog)} hogares · <b style="color:${nseColors[p.nse]||'#94a3b8'}">${nseLabel(p.nse)}</b><br>cubierta por la línea ${state.linea} (≤300 m${sen?", "+(sen==="0"?"Ida":"Regreso"):""})`
         : `<b>Manzana</b> · ${fmt(p.hog)} hogares<br>cobertura estática: <b>${p.cob_est}%</b> del área a ≤300 m de la red<br>${p.cob_nl||0} líneas cubren su centroide`,{sticky:true}).addTo(coverLayer));
   });
   setCoverLegend("cover");
@@ -990,6 +995,32 @@ function drawOferta(){
 function renderLineaKpis(){
   const el=$("linea-kpis"); if(!el) return;
   const mode=state.mapMode;
+  // DETENCIONES: KPIs por línea (det_periodo, por sentido)
+  if(state.linea!=="TODAS" && state.vista==="normal" && mode==="det" && DETP&&DETP.lineas){
+    const lb=state.linea, per=state.periodo, sen=state.sentido;
+    const d = DETP.lineas[lb] || {};
+    const sk = sen==="amb"?"amb":sen;
+    const sd = d[sk] || d.amb || {};
+    const det = sd[per];
+    const dAm=sd.am, dPm=sd.pm, dNoche=sd.noche, dAgg=sd.agg;
+    // sistema = promedio simple sobre líneas (mismo sentido y período)
+    let sis=null; const all=Object.values(DETP.lineas).map(x=>(x[sk]||x.amb||{})[per]).filter(v=>v!=null);
+    if(all.length) sis = +(all.reduce((a,b)=>a+b,0)/all.length).toFixed(1);
+    const lbl = v => v==null?"":(v<5?"Bajo":v<15?"Medio":v<25?"Alto":"Muy alto");
+    const bg = v => v==null?"":`background:hsla(${Math.max(0,Math.min(1,1-(v-5)/30))*120},75%,45%,.4)`;
+    const card=(cls,l,v,s,st="")=>`<div class="lk ${cls}" style="${st}"><div class="lab">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`;
+    const senL = sen==="amb"?"Ida+Regreso":(sen==="0"?"Ida":"Regreso");
+    el.style.display="grid";
+    el.innerHTML = [
+      card("b-tot",`🛑 % tiempo detenido (${periodoLbl(per)})`, det!=null?det.toFixed(1)+"%":"—", `${lbl(det)} · ${senL} · en ruta (excl. terminal)`, bg(det)),
+      card("b-eff","Vs. sistema", (det!=null&&sis!=null)?((det-sis).toFixed(1)):"—", sis!=null?`sistema ${sis}% · ${det!=null&&det<sis?"mejor":det!=null?"peor":"—"}`:"—"),
+      card("b-bajo","% AM punta", dAm!=null?dAm.toFixed(1)+"%":"—", lbl(dAm), bg(dAm)),
+      card("b-med","% PM punta", dPm!=null?dPm.toFixed(1)+"%":"—", lbl(dPm), bg(dPm)),
+      card("b-alto","% Noche", dNoche!=null?dNoche.toFixed(1)+"%":"—", lbl(dNoche), bg(dNoche)),
+      card("b-cic","% Agregado día", dAgg!=null?dAgg.toFixed(1)+"%":"—", lbl(dAgg), bg(dAgg)),
+    ].join("");
+    return;
+  }
   // BUNCHING: KPIs específicos por línea
   if(state.linea!=="TODAS" && state.vista==="normal" && mode==="bunch" && BUNCH&&BUNCH.lineas){
     const lb = state.linea, dia="L";
@@ -1164,7 +1195,11 @@ function setCoverLegend(mode){
   if(!mode) return;
   const RYG = `<span class="grad" style="background:linear-gradient(90deg,hsl(120,72%,50%),hsl(60,72%,50%),hsl(0,72%,50%))"></span>`;
   const GYR = `<span class="grad" style="background:linear-gradient(90deg,hsl(0,70%,50%),hsl(60,70%,50%),hsl(120,70%,50%))"></span>`;
-  const txt = mode==="cover" ? ["Cobertura estática (% del área a ≤300 m de la red)",GYR,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>color de la manzana = fracción cubierta · rojo lejos / verde cubierta</span>"]
+  const txt = mode==="cover" ? (state.linea!=="TODAS"
+      ? ["Cobertura estática · color por NSE de la manzana",
+         `<span style="display:inline-flex;gap:5px;align-items:center"><span style="display:inline-block;width:14px;height:10px;background:#fb923c;border-radius:2px"></span><i>bajo</i><span style="display:inline-block;width:14px;height:10px;background:#94a3b8;border-radius:2px"></span><i>medio</i><span style="display:inline-block;width:14px;height:10px;background:#2dd4bf;border-radius:2px"></span><i>alto</i></span>`,
+         "<span class='par'>solo manzanas a ≤300 m del trazado · NSE = terciles de escolaridad</span>"]
+      : ["Cobertura estática (% del área a ≤300 m de la red)",GYR,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>color de la manzana = fracción cubierta · rojo lejos / verde cubierta</span>"])
     : mode==="oferta" ? [`Cobertura dinámica · % del tiempo (${periodoLbl(state.periodo)})`,GYR,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>cápsula 2 min · P = 1 − Π(1 − fᵢ/30) · hover: bus/h y headway</span>"]
     : mode==="trans" ? ["Intensidad de transbordo (% de lo alcanzable)",RYG,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>verde = directo · rojo = exige transbordo</span>"]
     : mode==="wait" ? [`Espera hacia destinos · ${periodoLbl(state.periodo)} (min)`,RYG,"<span class='lbls'><i>0</i><i>1.5</i><i>3+</i></span><span class='par'>manzana = espera a destinos · ● paradero = espera ahí (hover)</span>"]
@@ -1223,6 +1258,8 @@ function renderMapa(){
         L.polyline(p,{color:col,weight:4.5,opacity:0.95,lineCap:"round"}).addTo(routeLayer);
       } else if(state.mapMode==="bunch"){      // bunch: base tenue gris (variantes), el drape encima da el color
         L.polyline(p,{color:"rgba(148,163,184,.35)",weight:2,opacity:.85,lineCap:"round"}).addTo(routeLayer);
+      } else if(state.mapMode==="conges"){     // conges: NO dibujar base; el drape de velocidad va arriba (en coverLayer)
+        // nada — el drape (drawCongestion) ya está
       } else {                                // otros modos: trazado en color fluo, más fino, sobre la coropleta
         L.polyline(p,{color:col,weight:3,opacity:0.9,lineCap:"round"}).addTo(routeLayer);
       }
@@ -1340,7 +1377,10 @@ function renderNarrative(){
       : `<b>real / comercial</b> (distancia ÷ tiempo, incluye las paradas en paraderos y semáforos): es la velocidad que realmente experimenta el pasajero`;
     txt=`<b>Congestión</b> · velocidad ${def}, por arco de la red en <b>${periodoLbl(per)}</b>, sentido <b>${sentidoLbl(state.sentido)}</b>. Ambas excluyen el dwell de terminal. Ida y regreso por separado (un eje puede estar lento solo en un sentido). Rojo = lento. ${v!=null?`Media del ámbito: <b>${v.toFixed(1)} km/h</b>. `:""}Alterna <b>En movimiento / Real</b>: la brecha entre ambas es el costo de las paradas.`;
   } else if(M==="bunch"){
-    txt=`<b>Bunching</b>: regularidad de los intervalos entre buses (CV de los headways) medida en puntos de la red, en <b>${periodoLbl(per)}</b>. Verde = buses parejos; rojo = <b>apelotonados</b> (vienen pegados y luego un hueco largo) → peor espera efectiva aguas abajo. Es la huella de la congestión sobre la frecuencia.`;
+    const sisCv = BUNCH&&BUNCH.sistema&&BUNCH.sistema.L&&BUNCH.sistema.L[per]&&BUNCH.sistema.L[per].cv;
+    txt=`<b>Bunching</b>: el <b>CV de headways</b> mide qué tan irregulares son los intervalos entre buses (desviación estándar ÷ intervalo medio). En <b>${periodoLbl(per)}</b>${sisCv!=null?` el sistema marca <b>${sisCv}</b>`:""}.
+    <br><span style="display:inline-flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px"><b style="color:#34d399">≤0.3</b> óptimo (despacho casi a cronómetro) · <b style="color:#a3e635">0.3–0.5</b> regular · <b style="color:#fbbf24">0.5–0.8</b> medio · <b style="color:#fb7185">≥0.8</b> apelotonado (huecos largos + buses pegados).</span>
+    <br>Referencia: un sistema BRT bien operado se considera <b>≤0.4</b>; <b>>1.0</b> indica problemas serios. En vista de línea, el drape muestra el CV por tramo de 400 m del eje principal — los rojos son cuellos donde se acumulan los buses.`;
   } else if(M==="det"){
     const R=(PDWELL&&PDWELL.reparto)||{};
     txt = state.detTipo==="par"
@@ -1400,13 +1440,25 @@ function renderCump(){
   if(state.linea!=="TODAS"){
     const d = L[state.linea];
     if(!d){ box.innerHTML=`<div class="empty">Sin frecuencia programada (GTFS) para esta línea.</div>`; return; }
-    box.innerHTML = ["L","S","D"].map(s=>{
+    const html_dia = ["L","S","D"].map(s=>{
       const c=d.cumpl[s];
       return `<div class="cump-row"><b style="min-width:78px">${DIAS[s]}</b>
         ${cumpBar(c)}
         <span class="pct" style="color:${cumpCol(c)};min-width:46px">${c==null?"—":c+"%"}</span>
         <span class="hint" style="flex:1;text-align:right">${d.obs_dia[s]} obs / ${d.prog_dia[s]} prog</span></div>`;
-    }).join("") + `<div class="hint" style="margin-top:8px">Despachos/día observados (GPS) vs programados (GTFS). 100% = línea blanca; &lt;80% = incumplimiento de frecuencia.</div>`;
+    }).join("");
+    // Cumplimiento por PERIODO (día laboral): sumar prog/obs en las horas del período
+    const HC=CUMP.horas, hidx={}; HC.forEach((h,i)=>hidx[h]=i);
+    const periodos=[["am","Punta AM"],["md","Mediodía"],["pm","Punta PM"],["off","Fuera punta"],["noche","Noche"]];
+    const filasPer = periodos.map(([k,lab])=>{
+      const hrs = PERIODO_H[k]||[]; let prog=0, obs=0;
+      hrs.forEach(h=>{ const i=hidx[h]; if(i==null) return; prog+=(d.prog.L[i]||0); obs+=(d.obs.L[i]||0); });
+      const c = prog>0 ? Math.round(100*obs/prog*10)/10 : null;
+      return `<div class="cump-row"><b style="min-width:78px">${lab}</b>${cumpBar(c)}<span class="pct" style="color:${cumpCol(c)};min-width:46px">${c==null?"—":c+"%"}</span><span class="hint" style="flex:1;text-align:right">${obs.toFixed(0)} obs / ${prog} prog</span></div>`;
+    }).join("");
+    box.innerHTML = html_dia +
+      `<div class="hint" style="margin-top:10px;color:var(--muted)"><b>Por período</b> (día laboral)</div>` + filasPer +
+      `<div class="hint" style="margin-top:8px">Despachos/día observados (GPS) vs programados (GTFS). 100% = línea blanca; &lt;80% = incumplimiento de frecuencia.</div>`;
   } else {
     // en comuna: solo las líneas que operan en ella
     const lineasAmbito = state.comuna==="TODAS" ? null
@@ -1903,6 +1955,7 @@ function renderEvolucion(){
     J("perfil_vel_dist.json").then(d=>{ VD=d; renderVelDist(); }).catch(()=>{});
     J("bunching.json").then(d=>{ BUNCH=d; if(state.mapMode==="bunch") renderMapa(); }).catch(()=>{});
     J("bunching_arco.json").then(d=>{ BUNCHA=d; if(state.mapMode==="bunch") renderMapa(); }).catch(()=>{});
+    J("det_periodo.json").then(d=>{ DETP=d; if(state.mapMode==="det") renderMapa(); }).catch(()=>{});
     J("destinos_principales.json").then(d=>{ DEST=d; if(state.mapMode==="cover"||state.mapMode==="trans") renderMapa(); }).catch(()=>{});
     J("paraderos_espera.json").then(d=>{ PESP=d; if(state.mapMode==="wait") renderMapa(); }).catch(()=>{});
     J("empresa_stats.json").then(d=>{ EMPR=d; renderEmpresas(); }).catch(()=>{});
