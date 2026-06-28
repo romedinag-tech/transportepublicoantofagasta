@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=87`).then(r=>r.json());
-const BUILD = "afta-v38";
+const J = n => fetch(`data/${n}?v=89`).then(r=>r.json());
+const BUILD = "afta-v40";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -16,6 +16,7 @@ let CLINE={lineas:[],nse:{}};
 let SALT=null, salidasChart=null;
 let VD=null, vdChart=null, vdMarker=null;
 let BUNCH=null, BUNCHA=null, DETP=null;
+let modalPie=null;
 // segmentos del shape principal de una línea-sentido, etiquetados con su bin de bunching
 let _shapeBinsCache={};
 function shapePrincipalLS(lb, s){
@@ -62,11 +63,14 @@ function setVdMarker(latlng, label){
   if(label) vdMarker.bindTooltip(label, {permanent:true, direction:"top", offset:[0,-8], className:"vd-tip"});
   vdMarker.addTo(lmap);
 }
-let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", congTipo:"real", detTipo:"cong", salDia:"L", salSm:0, vdDia:"L", vdPer:"agg", vdSen:"amb", vdSm:0, cmpA:null, cmpB:null};
+let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", congTipo:"real", detTipo:"cong", salDia:"L", salSm:0, vdDia:"L", vdPer:"agg", vdSen:"amb", vdSm:0, modalTr:"pub", cmpA:null, cmpB:null};
 let chart, csChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = ""; // Antofagasta: sin captura GTFS-RT aún → modo vivo deshabilitado (degrada)
 const BEARING_H = 270;  // vista horizontal: ciudad acostada (norte izq, sur der) y mar (oeste) abajo
-const MAP_MODES = [["recorridos","Recorridos"],["cover","Cobertura estática"],["oferta","Cobertura dinámica"],["conges","Congestión"],["bunch","Bunching"],["det","Detenciones"],["term","Terminales"]];
+const MAP_MODES = [["recorridos","Recorridos"],["cover","Cobertura estática"],["oferta","Cobertura dinámica"],["conges","Congestión"],["bunch","Bunching"],["det","Detenciones"],["term","Terminales"],["modal","Demanda Censo"]];
+const MODOS_TR = [["pub","Transp. público"],["auto","Auto"],["cam","Camina"],["bici","Bicicleta"],["moto","Motocicleta"],["otros","Otros"]];
+const MODO_COLORS = {pub:"#22d3ee", auto:"#fb923c", cam:"#bef264", bici:"#a78bfa", moto:"#f472b6", otros:"#94a3b8"};
+const modoLbl = k => (MODOS_TR.find(x=>x[0]===k)||["","—"])[1];
 const PEAK_H = [7,8,9,17,18,19];
 
 const CS_DIAS = [["L","Laboral"],["S","Sábado"],["D","Domingo"]];
@@ -165,6 +169,14 @@ function buildCongtipo(){
     box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.p===state.congTipo));
     if(state.mapMode==="conges") render(); });
 }
+function buildModalTr(){
+  const box=$("modaltr-sel"); if(!box) return;
+  box.innerHTML = `<span class="lbl">Modo</span><div class="seg">`+
+    MODOS_TR.map(([k,l])=>`<b data-p="${k}" class="${state.modalTr===k?"on":""}">${l}</b>`).join("")+`</div>`;
+  box.querySelectorAll("b").forEach(el=>el.onclick=()=>{ state.modalTr=el.dataset.p;
+    box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.p===state.modalTr));
+    if(state.mapMode==="modal") render(); });
+}
 function buildDettipo(){
   const box=$("dettipo-sel"); if(!box) return;
   box.innerHTML = `<span class="lbl">Detención</span><div class="seg">`+
@@ -259,6 +271,8 @@ function render(){
   if($("congtipo-sel")) $("congtipo-sel").style.display = congtipoRel ? "flex" : "none";
   const dettipoRel = state.vista==="normal" && state.mapMode==="det";
   if($("dettipo-sel")) $("dettipo-sel").style.display = dettipoRel ? "flex" : "none";
+  const modalRel = state.vista==="normal" && state.mapMode==="modal";
+  if($("modaltr-sel")) $("modaltr-sel").style.display = modalRel ? "flex" : "none";
 
   // VISTAS ESPECIALES (territorio): ranking / comparador de comunas
   if(state.vista==="ranking" || state.vista==="comparador"){
@@ -291,6 +305,7 @@ function render(){
   renderVelDist();
   renderMapa();
   renderLineaKpis();
+  renderModalPanel();
   renderCoverTable();
   renderBunchTable();
   renderRanking();
@@ -945,6 +960,24 @@ function lineaFreqPeriodo(linea, per){     // buses/h observados de la línea en
 }
 const nseColors = {0:"#fb923c", 1:"#94a3b8", 2:"#2dd4bf"};   // bajo / medio / alto
 const nseLabel  = n => n===0?"NSE bajo":n===1?"NSE medio":n===2?"NSE alto":"sin dato NSE";
+function drawModal(){
+  // Coropleta de manzanas por cantidad de personas que usan el modo elegido (Censo 2024)
+  if(!coverLayer) return; coverLayer.clearLayers();
+  if(!COB||!COB.features){ setCoverLegend("modal"); return; }
+  const k = "tm_"+state.modalTr;
+  const baseCol = MODO_COLORS[state.modalTr] || "#22d3ee";
+  // escala por p95 para que la coropleta no la dominen los outliers
+  const vals = COB.features.map(f=>f.properties[k]||0).filter(v=>v>0).sort((a,b)=>a-b);
+  const ref = vals.length ? (vals[Math.floor(vals.length*0.95)] || 1) : 1;
+  COB.features.forEach(f=>{ const p=f.properties; if(!inComuna(p.cy,p.cx)) return;
+    const v = p[k]||0; if(!v) return;
+    const t = Math.min(1, v/ref);
+    const op = 0.18 + 0.72*Math.sqrt(t);    // sqrt para resaltar más las zonas medias
+    mzRings(f).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:baseCol,fillOpacity:op})
+      .bindTooltip(`<b>Manzana</b> · ${fmt(p.hog)} hogares · ${fmt(p.per)} personas<br><b style="color:${baseCol}">${modoLbl(state.modalTr)}: ${fmt(v)}</b> personas (Censo 2024)`,{sticky:true}).addTo(coverLayer));
+  });
+  setCoverLegend("modal");
+}
 function drawCobertura(){
   if(!coverLayer) return; coverLayer.clearLayers();
   if(!COB||!COB.features){ setCoverLegend("cover"); return; }
@@ -1085,6 +1118,40 @@ function renderLineaKpis(){
     card("b-cic","🔁 Ciclos/bus/día", ciclos!=null?ciclos.toFixed(1):"—", tcMin?`tiempo de ciclo ${Math.round(tcMin)} min · ${flota||"—"} buses`:`—`),
   ].join("");
 }
+function renderModalPanel(){
+  const pan=$("modal-panel"); if(!pan) return;
+  const show = state.mapMode==="modal" && state.vista==="normal" && COB && COB.features;
+  if(!show){ pan.style.display="none"; return; }
+  // Totales por modo (suma sobre manzanas del ámbito)
+  const acc = {pub:0,auto:0,cam:0,bici:0,moto:0,otros:0};
+  COB.features.forEach(f=>{ const p=f.properties; if(!inComuna(p.cy,p.cx)) return;
+    acc.pub+=p.tm_pub||0; acc.auto+=p.tm_auto||0; acc.cam+=p.tm_cam||0;
+    acc.bici+=p.tm_bici||0; acc.moto+=p.tm_moto||0; acc.otros+=p.tm_otros||0; });
+  const tot = Object.values(acc).reduce((a,b)=>a+b,0)||1;
+  pan.style.display="";
+  // KPIs (un rectángulo por modo)
+  const card = (k,l)=>{ const v=acc[k], pct=(100*v/tot).toFixed(1);
+    const sel = state.modalTr===k;
+    return `<div class="lk" style="border-left:3px solid ${MODO_COLORS[k]};${sel?'outline:1.5px solid '+MODO_COLORS[k]+';outline-offset:-1px':''}"><div class="lab">${l}</div><div class="val" style="color:${MODO_COLORS[k]}">${NF.format(v)}</div><div class="sub">${pct}% del total</div></div>`; };
+  $("modal-kpis").innerHTML = MODOS_TR.map(([k,l])=>card(k,l)).join("") +
+    `<div class="lk" style="border-left:3px solid #94a3b8"><div class="lab">👥 Total</div><div class="val">${NF.format(tot)}</div><div class="sub">personas (Censo 2024)</div></div>`;
+  // Pie chart (excluyendo modos con 0)
+  if(!modalPie) modalPie = echarts.init($("modal-pie"));
+  const th = TH();
+  modalPie.setOption({
+    textStyle:{fontFamily:"Inter,sans-serif",color:th.tx},
+    tooltip:{trigger:"item",backgroundColor:th.tip,borderColor:th.tipB,textStyle:{color:th.tx},
+      formatter:p=>`<b>${p.name}</b><br>${NF.format(p.value)} personas · ${p.percent}%`},
+    legend:{orient:"vertical",right:8,top:"middle",textStyle:{color:th.mut,fontSize:11},itemWidth:12,itemHeight:8},
+    series:[{type:"pie",radius:["40%","75%"],center:["35%","50%"],avoidLabelOverlap:true,
+      itemStyle:{borderColor:th.bg,borderWidth:2},
+      label:{color:th.tx,fontSize:11,formatter:"{b}\n{d}%"},
+      labelLine:{lineStyle:{color:th.mut}},
+      data: MODOS_TR.map(([k,l])=>({name:l,value:acc[k],itemStyle:{color:MODO_COLORS[k]}}))
+                  .filter(d=>d.value>0).sort((a,b)=>b.value-a.value)}]
+  },true);
+  setTimeout(()=>modalPie.resize(),60);
+}
 function renderCoverTable(){
   const el=$("cover-table"); if(!el) return;
   const rows=(CLINE&&CLINE.lineas)||[];
@@ -1121,6 +1188,7 @@ function drawCoverage(mode){
   if(mode==="term"){ drawTerminales(); return; }
   if(mode==="cover"){ drawCobertura(); return; }
   if(mode==="oferta"){ drawOferta(); return; }
+  if(mode==="modal"){ drawModal(); return; }
   if(!coverLayer) return; coverLayer.clearLayers();
   if(!COB) return;
   COB.features.forEach(f=>{
@@ -1210,6 +1278,7 @@ function setCoverLegend(mode){
     : mode==="det" ? ["Congestión en tránsito (semáforos / tacos)",`<span class="grad" style="background:linear-gradient(90deg,hsl(45,85%,52%),hsl(0,85%,52%))"></span>`,"<span class='lbls'><i>menor</i><i>mayor</i></span><span class='par'>tamaño = tiempo detenido · <b style='color:#22d3ee'>▣</b> terminal (flota al pasar)</span>"]
     : mode==="detpar" ? ["Detención de servicio por paradero (s/bus·día)",`<span class="grad" style="background:linear-gradient(90deg,hsl(48,88%,52%),hsl(0,88%,52%))"></span>`,"<span class='lbls'><i>0</i><i>90</i><i>180+</i></span><span class='par'>tiempo de subida/bajada de pasajeros en cada parada</span>"]
     : mode==="term" ? ["Red de terminales y cabeceras",`<span style="display:inline-block;width:14px;height:14px;border:1.5px solid #22d3ee;background:rgba(34,211,238,.15);border-radius:50%;vertical-align:middle"></span>`,"<span class='par'><b style='color:#22d3ee'>▣</b> terminal · tamaño del anillo = flota que opera desde ahí · hover = líneas</span>"]
+    : mode==="modal" ? [`Demanda Censo 2024 · ${modoLbl(state.modalTr)}`,`<span class="grad" style="background:linear-gradient(90deg,rgba(0,0,0,0),${MODO_COLORS[state.modalTr]||'#22d3ee'})"></span>`,"<span class='lbls'><i>pocos</i><i>muchos</i></span><span class='par'>opacidad ∝ √(personas/p95) · cómo se mueve la gente al trabajo/estudio</span>"]
     : ["NSE (avalúo CLP/m²)",`<span class="grad" style="background:linear-gradient(90deg,hsl(205,68%,52%),hsl(118,68%,52%),hsl(30,68%,52%))"></span>`,"<span class='lbls'><i>bajo</i><i></i><i>alto</i></span>"];
   coverLegend = L.control({position:"bottomleft"});
   coverLegend.onAdd = ()=>{ const d=L.DomUtil.create("div","speedleg"); d.innerHTML=`<b>${txt[0]}</b>${txt[1]}${txt[2]}`; return d; };
@@ -1298,7 +1367,7 @@ function renderMapa(){
     const M=state.mapMode;
     const RC = (R.cob_est)||{}, RO=(R.cob_of&&R.cob_of.por_periodo&&R.cob_of.por_periodo[state.periodo])||{};
     const titulo = {cover:"Cobertura estática (Censo 2024 · 300 m)", oferta:`Cobertura dinámica · % del tiempo (${periodoLbl(state.periodo)})`,
-      conges:`Velocidad ${congtipoLbl(state.congTipo).toLowerCase()} · ${periodoLbl(state.periodo)}`, bunch:`Apelotonamiento (bunching) · ${periodoLbl(state.periodo)}`, det:(state.detTipo==="par"?"Detención de servicio en paraderos":"Congestión en tránsito y terminales"), term:"Red de terminales y cabeceras"}[M];
+      conges:`Velocidad ${congtipoLbl(state.congTipo).toLowerCase()} · ${periodoLbl(state.periodo)}`, bunch:`Apelotonamiento (bunching) · ${periodoLbl(state.periodo)}`, det:(state.detTipo==="par"?"Detención de servicio en paraderos":"Congestión en tránsito y terminales"), term:"Red de terminales y cabeceras", modal:`Demanda Censo 2024 · ${modoLbl(state.modalTr)}`}[M];
     if(lineaView){
       $("map-title").textContent = (titulo||"") + ` · Línea ${state.linea}`;
       if(b) b.innerHTML = (()=>{
@@ -1325,7 +1394,13 @@ function renderMapa(){
         det:(()=>{const Rp=(PDWELL&&PDWELL.reparto)||{}; return state.detTipo==="par"
           ? `${(PDWELL&&PDWELL.paraderos||[]).length} paraderos con dwell · el ${Rp.paradero??"—"}% del tiempo detenido en ruta es servicio en paraderos`
           : `${DET2.length} focos de congestión · ${(TERM&&TERM.terminales||[]).length} terminales · reparto del detenido: paradero ${Rp.paradero??"—"}% · congestión ${Rp.congestion??"—"}% · terminal ${Rp.terminal??"—"}%`;})(),
-        term:`${(TERM&&TERM.terminales||[]).length} terminales detectados`}[M];
+        term:`${(TERM&&TERM.terminales||[]).length} terminales detectados`,
+        modal:(()=>{ if(!COB||!COB.features) return ""; let tot=0, sel=0;
+          COB.features.forEach(f=>{ const p=f.properties; if(!inComuna(p.cy,p.cx)) return;
+            tot+=(p.tm_pub||0)+(p.tm_auto||0)+(p.tm_cam||0)+(p.tm_bici||0)+(p.tm_moto||0)+(p.tm_otros||0);
+            sel+=(p["tm_"+state.modalTr]||0); });
+          const pct = tot? (100*sel/tot).toFixed(1):0;
+          return `<b>${modoLbl(state.modalTr)}</b>: ${fmt(sel)} personas (${pct}% de ${fmt(tot)} totales del Censo 2024)`; })()}[M];
       if(b) b.textContent = state.comuna==="TODAS" ? (badgeSys||"") : `${titulo} · ${state.comuna}`;
       $("map-title").textContent = (titulo||"Mapa territorial") + (state.comuna==="TODAS"?"":` · ${state.comuna}`);
     }
@@ -1980,7 +2055,7 @@ function renderEvolucion(){
       .then(([vf,vt])=>{ VFREQ=vf; VTREND=vt; renderVarFreq(); });
     J("terminales_linea.json").then(d=>{ TLIN=d; if(state.linea!=="TODAS") renderMapa(); }).catch(()=>{});
     buildMapModes();
-    buildPeriodo(); buildPurpose(); buildSentido(); buildCongtipo(); buildDettipo(); buildSaldia(); buildSalSm(); buildVdDia(); buildVdPer(); buildVdSen(); buildVdSm();
+    buildPeriodo(); buildPurpose(); buildSentido(); buildCongtipo(); buildDettipo(); buildSaldia(); buildSalSm(); buildVdDia(); buildVdPer(); buildVdSen(); buildVdSm(); buildModalTr();
     buildComunaTabs();
     buildLineaList();
     $("linea-search").addEventListener("input", e=>buildLineaList(e.target.value));
