@@ -6,14 +6,14 @@
 <title>Antofagasta · Centro de Mando · Transporte Público</title>
 <meta name="description" content="Centro de mando analítico del transporte público de Antofagasta: flota, velocidad, cumplimiento GTFS vs GPS y geometría oficial sobre 11,8 millones de registros GPS (junio 2025).">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <!-- Rotación del mapa (Antofagasta es muy larga N-S; permite verla horizontal) -->
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
 <!-- Componentes y variables de tema existentes (kpi, ctab, litem, rank-row, cump-row, seg…) -->
-<link rel="stylesheet" href="assets/styles.css?v=90">
-<link rel="stylesheet" href="assets/shell.css?v=90">
+<link rel="stylesheet" href="assets/styles.css?v=91">
+<link rel="stylesheet" href="assets/shell.css?v=91">
 <!-- Aplica el tema guardado antes del paint (evita parpadeo) -->
 <script>try{var t=localStorage.getItem("afta-theme")||"dark";document.documentElement.dataset.theme=t;}catch(e){}</script>
 <!-- Tailwind (Play CDN, sin build). preflight off para no pisar los componentes existentes. -->
@@ -23,12 +23,13 @@ tailwind.config = {
   corePlugins: { preflight: false },
   theme: { extend: {
     fontFamily: {
-      sans: ['Inter','-apple-system','Segoe UI','Roboto','sans-serif'],
-      mono: ['JetBrains Mono','ui-monospace','SFMono-Regular','Menlo','monospace'],
+      sans: ['IBM Plex Sans','-apple-system','Segoe UI','Roboto','sans-serif'],
+      mono: ['IBM Plex Mono','ui-monospace','SFMono-Regular','Menlo','monospace'],
+      display: ['IBM Plex Sans Condensed','IBM Plex Sans','Segoe UI','sans-serif'],
     },
-    colors: { neon: { cyan:'#22d3ee', sky:'#38bdf8', emerald:'#34d399', amber:'#fbbf24', orange:'#fb923c', rose:'#fb7185' } },
+    colors: { neon: { cyan:'#38acc9', sky:'#38acc9', emerald:'#34c08c', amber:'#fbbf24', orange:'#fb923c', rose:'#fb7185', cobre:'#c47a45' } },
     keyframes: {
-      pulsering: { '0%':{boxShadow:'0 0 0 0 rgba(52,211,153,.55)'}, '70%':{boxShadow:'0 0 0 7px rgba(52,211,153,0)'}, '100%':{boxShadow:'0 0 0 0 rgba(52,211,153,0)'} },
+      pulsering: { '0%':{boxShadow:'0 0 0 0 rgba(52,192,140,.55)'}, '70%':{boxShadow:'0 0 0 7px rgba(52,192,140,0)'}, '100%':{boxShadow:'0 0 0 0 rgba(52,192,140,0)'} },
     },
     animation: { pulsering: 'pulsering 2s infinite' },
   }},
@@ -47,12 +48,12 @@ tailwind.config = {
     background:linear-gradient(180deg,var(--panel),var(--panel2));
     box-shadow:0 18px 40px -24px rgba(0,0,0,.55);overflow:hidden}
   .widget::before{content:"";position:absolute;inset:0 0 auto 0;height:1px;
-    background:linear-gradient(90deg,transparent,rgba(56,189,248,.5),transparent);opacity:.5}
+    background:linear-gradient(90deg,transparent,rgba(196,122,69,.5),transparent);opacity:.5}
   .widget-h{display:flex;align-items:center;gap:9px;padding:12px 15px;border-bottom:1px solid var(--line)}
   .widget-h .ico{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;
-    background:rgba(56,189,248,.12);color:var(--acc);flex:none}
+    background:rgba(56,172,201,.12);color:var(--acc);flex:none}
   .widget-h .ico.ico-png{background:transparent;width:26px;height:26px}
-  .widget-h .ico-png img{display:block;width:22px;height:22px;filter:drop-shadow(0 0 5px rgba(34,211,238,.45))}
+  .widget-h .ico-png img{display:block;width:22px;height:22px;filter:drop-shadow(0 0 5px rgba(56,172,201,.45))}
   .widget-h h3{font-size:12.5px;font-weight:600;letter-spacing:.01em}
   .widget-h .sub{font-size:11px;color:var(--dim)}
   .widget-b{padding:13px 15px}
@@ -69,8 +70,8 @@ tailwind.config = {
 
   /* El MAPA como héroe: marco con esquinas tipo HUD y glow interior */
   .map-hero{position:relative;border-radius:14px;overflow:hidden;
-    box-shadow:inset 0 0 0 1px var(--line),inset 0 0 70px -30px rgba(34,211,238,.35)}
-  .map-hero .corner{position:absolute;width:18px;height:18px;border-color:rgba(34,211,238,.7);z-index:500;pointer-events:none}
+    box-shadow:inset 0 0 0 1px var(--line),inset 0 0 70px -30px rgba(56,172,201,.30)}
+  .map-hero .corner{position:absolute;width:18px;height:18px;border-color:rgba(196,122,69,.75);z-index:500;pointer-events:none}
   .map-hero .c-tl{top:9px;left:9px;border-top:2px solid;border-left:2px solid;border-top-left-radius:5px}
   .map-hero .c-tr{top:9px;right:9px;border-top:2px solid;border-right:2px solid;border-top-right-radius:5px}
   .map-hero .c-bl{bottom:9px;left:9px;border-bottom:2px solid;border-left:2px solid;border-bottom-left-radius:5px}
@@ -123,20 +124,20 @@ tailwind.config = {
        · paraderos en blanco, comuna activa en cyan (#38bdf8)
      Para que los buses/rutas "neón" resalten más, los puntos GPS van en cyan/naranja.
      Aquí estilizamos los controles y tooltips de Leaflet a modo HUD oscuro: */
-  .leaflet-container{background:#0a0f1c}
+  .leaflet-container{background:#0a1315}
   .leaflet-tooltip,.leaflet-popup-content-wrapper{background:var(--topbar)!important;color:var(--tx)!important;
     border:1px solid var(--line2)!important;border-radius:9px!important;backdrop-filter:blur(10px);
     box-shadow:0 10px 30px -8px rgba(0,0,0,.6)!important;font-family:var(--sans);font-size:11.5px;font-weight:500}
   .leaflet-tooltip-top:before{border-top-color:var(--line2)!important}
   .term-ic{background:none!important;border:none!important}
   .vd-tip{background:rgba(15,23,42,.92)!important;border:1px solid #fbbf24!important;color:#fbbf24!important;font-weight:600;font-family:var(--mono);font-size:11px;padding:2px 7px!important}
-  .term-box{display:inline-block;font:700 11px/1 var(--sans);color:#0b1220;background:#22d3ee;
-    border:1.5px solid #0e7490;border-radius:5px;padding:3px 6px;white-space:nowrap;
+  .term-box{display:inline-block;font:700 11px/1 var(--sans);color:#06181d;background:#38acc9;
+    border:1.5px solid #1d6e82;border-radius:5px;padding:3px 6px;white-space:nowrap;
     box-shadow:0 2px 8px -2px rgba(0,0,0,.7);letter-spacing:.02em}
   .leaflet-popup-tip{background:var(--topbar)!important;border:1px solid var(--line2)!important}
   .leaflet-bar a,.leaflet-control-layers{background:var(--panel)!important;color:var(--tx)!important;border-color:var(--line)!important}
   .leaflet-bar a:hover{background:var(--panel2)!important;color:var(--acc)!important}
-  .leaflet-control-attribution{background:rgba(10,15,28,.6)!important;color:var(--dim)!important}
+  .leaflet-control-attribution{background:rgba(10,19,21,.6)!important;color:var(--dim)!important}
   .leaflet-control-attribution a{color:var(--muted)!important}
 
   /* Maqueta de tooltip de mapa (referencia de estilo para popups de bus/ruta) */
@@ -168,21 +169,21 @@ tailwind.config = {
   .periodo-sel .lbl{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
 
   /* ===== HERO intro: red neuronal animada ===== */
-  #hero-splash{position:fixed;inset:0;z-index:9999;background:radial-gradient(120% 120% at 50% 40%,#0e1730,#070b16 70%);
+  #hero-splash{position:fixed;inset:0;z-index:9999;background:radial-gradient(120% 120% at 50% 40%,#0e2024,#060d0f 70%);
     display:grid;place-items:center;overflow:hidden;transition:opacity .85s ease}
   #hero-splash.gone{opacity:0;pointer-events:none}
   #hero-canvas{position:absolute;inset:0;width:100%;height:100%;opacity:.9}
   .hero-content{position:relative;z-index:2;text-align:center;padding:20px;animation:heroIn 1s ease both}
   @keyframes heroIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   .hero-logo{width:62px;height:62px;border-radius:16px;margin:0 auto 22px;display:grid;place-items:center;
-    color:#06121f;font-weight:800;font-size:24px;background:linear-gradient(135deg,#22d3ee,#34d399);
-    box-shadow:0 0 40px rgba(34,211,238,.5)}
-  .hero-content h1{font-family:var(--sans);font-size:clamp(24px,4.6vw,50px);font-weight:800;line-height:1.08;letter-spacing:.02em;
-    background:linear-gradient(120deg,#e8eef8,#7dd3fc 55%,#34d399);-webkit-background-clip:text;background-clip:text;color:transparent;
-    text-shadow:0 2px 40px rgba(34,211,238,.15)}
-  .hero-content p{margin-top:14px;font-family:var(--mono);font-size:clamp(10px,1.4vw,13px);letter-spacing:.32em;color:#7dd3fc;text-transform:uppercase}
-  .hero-load{width:190px;height:3px;margin:26px auto 0;border-radius:3px;background:rgba(125,211,252,.14);overflow:hidden}
-  .hero-load span{display:block;height:100%;width:38%;border-radius:3px;background:linear-gradient(90deg,#22d3ee,#34d399);animation:heroSweep 1.15s cubic-bezier(.5,0,.5,1) infinite}
+    color:#1c1206;font-family:var(--display);font-weight:700;font-size:21px;letter-spacing:.03em;background:linear-gradient(135deg,#c47a45,#9c5a2c);
+    box-shadow:0 0 40px rgba(196,122,69,.5)}
+  .hero-content h1{font-family:var(--display);font-size:clamp(24px,4.6vw,50px);font-weight:700;line-height:1.06;letter-spacing:.01em;
+    background:linear-gradient(120deg,#eef3f0,#7fc6d6 60%);-webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 2px 40px rgba(56,172,201,.15)}
+  .hero-content p{margin-top:14px;font-family:var(--mono);font-size:clamp(10px,1.4vw,13px);letter-spacing:.32em;color:#7fc6d6;text-transform:uppercase}
+  .hero-load{width:190px;height:3px;margin:26px auto 0;border-radius:3px;background:rgba(127,198,214,.14);overflow:hidden}
+  .hero-load span{display:block;height:100%;width:38%;border-radius:3px;background:linear-gradient(90deg,#38acc9,#c47a45);animation:heroSweep 1.15s cubic-bezier(.5,0,.5,1) infinite}
   @keyframes heroSweep{0%{transform:translateX(-130%)}100%{transform:translateX(360%)}}
   .hero-skip{margin-top:18px;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);opacity:.7}
 </style>
@@ -194,9 +195,9 @@ tailwind.config = {
 <div id="hero-splash">
   <canvas id="hero-canvas"></canvas>
   <div class="hero-content">
-    <div class="hero-logo">GC</div>
+    <div class="hero-logo">ANF</div>
     <h1>TRANSPORTE PÚBLICO<br>ANTOFAGASTA</h1>
-    <p>CENTRO DE MANDO · ANALÍTICA GPS</p>
+    <p>EJE COSTERO · ANALÍTICA GPS</p>
     <div class="hero-load"><span></span></div>
     <div class="hero-skip">toca para entrar</div>
   </div>
@@ -218,10 +219,10 @@ tailwind.config = {
     for(var i=0;i<nodes.length;i++){ var a=nodes[i]; a.x+=a.vx; a.y+=a.vy;
       if(a.x<0){a.x=0;a.vx*=-1;} if(a.x>W){a.x=W;a.vx*=-1;} if(a.y<0){a.y=0;a.vy*=-1;} if(a.y>H){a.y=H;a.vy*=-1;}
       for(var j=i+1;j<nodes.length;j++){ var b=nodes[j],dx=a.x-b.x,dy=a.y-b.y,d=Math.sqrt(dx*dx+dy*dy);
-        if(d<DIST){ var o=(1-d/DIST); ctx.strokeStyle='rgba(56,189,248,'+(o*0.5)+')'; ctx.lineWidth=o*1.1+0.2;
+        if(d<DIST){ var o=(1-d/DIST); ctx.strokeStyle='rgba(56,172,201,'+(o*0.5)+')'; ctx.lineWidth=o*1.1+0.2;
           ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); } } }
-    ctx.shadowBlur=8; ctx.shadowColor='#22d3ee';
-    for(var k=0;k<nodes.length;k++){ var p=nodes[k]; ctx.beginPath(); ctx.fillStyle='rgba(34,211,238,.92)'; ctx.arc(p.x,p.y,1.7,0,6.283); ctx.fill(); }
+    ctx.shadowBlur=8; ctx.shadowColor='#38acc9';
+    for(var k=0;k<nodes.length;k++){ var p=nodes[k]; ctx.beginPath(); ctx.fillStyle='rgba(56,172,201,.92)'; ctx.arc(p.x,p.y,1.7,0,6.283); ctx.fill(); }
     ctx.shadowBlur=0;
     if(!reduce && tick%11===0 && nodes.length>2){
       var a2=nodes[(Math.random()*nodes.length)|0], near=null, best=DIST;
@@ -229,7 +230,7 @@ tailwind.config = {
       if(near) pulses.push({a:a2,b:near,t:0}); }
     for(var q=pulses.length-1;q>=0;q--){ var pu=pulses[q]; pu.t+=0.05; if(pu.t>=1){pulses.splice(q,1);continue;}
       var x=pu.a.x+(pu.b.x-pu.a.x)*pu.t, y=pu.a.y+(pu.b.y-pu.a.y)*pu.t;
-      ctx.beginPath(); ctx.fillStyle='rgba(52,211,153,'+(1-pu.t)+')'; ctx.shadowBlur=10; ctx.shadowColor='#34d399'; ctx.arc(x,y,2.6,0,6.283); ctx.fill(); ctx.shadowBlur=0; }
+      ctx.beginPath(); ctx.fillStyle='rgba(196,122,69,'+(1-pu.t)+')'; ctx.shadowBlur=10; ctx.shadowColor='#c47a45'; ctx.arc(x,y,2.6,0,6.283); ctx.fill(); ctx.shadowBlur=0; }
   }
   function dismiss(){ if(sp.classList.contains('gone'))return; sp.classList.add('gone');
     setTimeout(function(){ if(timer)clearInterval(timer); sp.style.display='none'; },850); }
@@ -248,7 +249,7 @@ tailwind.config = {
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
     </button>
     <div class="flex items-center gap-2.5 min-w-0">
-      <div class="grid place-items-center w-8 h-8 rounded-[10px] text-[#06121f] font-extrabold text-[13px]" style="background:linear-gradient(135deg,#22d3ee,#34d399);box-shadow:0 4px 16px rgba(34,211,238,.35)">GC</div>
+      <div class="grid place-items-center w-8 h-8 rounded-[10px] font-display font-bold text-[11px] tracking-wide" style="color:#1c1206;background:linear-gradient(135deg,#c47a45,#9c5a2c);box-shadow:0 4px 16px rgba(196,122,69,.35)">ANF</div>
       <div class="leading-tight min-w-0 hidden xs:block sm:block">
         <b class="text-[13px] font-semibold block truncate">Transporte · Antofagasta</b>
         <span class="text-[10.5px] text-[var(--dim)] tracking-wide">CENTRO DE MANDO · ANALÍTICA GPS</span>
@@ -268,6 +269,9 @@ tailwind.config = {
       </a>
     </div>
   </header>
+
+  <!-- ============ LÍNEA DE COSTA (firma): codifica el eje costero lineal ============ -->
+  <div class="coastline" aria-hidden="true"></div>
 
   <!-- ============ BARRA SUPERIOR: TERRITORIO (comunas) ============ -->
   <div class="comuna-bar thin-scroll">
@@ -313,7 +317,7 @@ tailwind.config = {
         <!-- MAPA HÉROE (2/3) -->
         <section class="widget xl:col-span-2 flex flex-col">
           <div class="widget-h">
-            <span class="ico ico-png"><img src="assets/brand/ic_bus.png?v=90" alt="" width="22" height="22"></span>
+            <span class="ico ico-png"><img src="assets/brand/ic_bus.png?v=91" alt="" width="22" height="22"></span>
             <div class="min-w-0">
               <h3 id="map-title" class="truncate">Mapa del sistema</h3>
               <span class="sub">recorrido oficial · velocidad map-matched · paraderos</span>
@@ -356,7 +360,7 @@ tailwind.config = {
         <div class="flex flex-col gap-4 xl:max-h-[1180px] xl:overflow-y-auto thin-scroll xl:pr-1">
           <section class="widget">
             <div class="widget-h">
-              <span class="ico ico-png"><img src="assets/brand/ic_gauge.png?v=90" alt="" width="22" height="22"></span>
+              <span class="ico ico-png"><img src="assets/brand/ic_gauge.png?v=91" alt="" width="22" height="22"></span>
               <div><h3>Flota y velocidad</h3><span class="sub">por hora · días laborables</span></div>
             </div>
             <div class="widget-b"><div id="ch-hora" style="height:280px"></div><p id="hora-narr" class="wnarr"></p></div>
@@ -415,7 +419,7 @@ tailwind.config = {
       <!-- Cumplimiento de frecuencia -->
       <section class="widget">
         <div class="widget-h">
-          <span class="ico ico-png"><img src="assets/brand/ic_shieldcheck.png?v=90" alt="" width="22" height="22"></span>
+          <span class="ico ico-png"><img src="assets/brand/ic_shieldcheck.png?v=91" alt="" width="22" height="22"></span>
           <div><h3>Cumplimiento de frecuencia</h3><span class="sub">programado (GTFS) vs observado (GPS)</span></div>
         </div>
         <div class="widget-b"><div id="cump-box"></div><p id="cump-narr" class="wnarr"></p></div>
@@ -424,7 +428,7 @@ tailwind.config = {
       <!-- Cumplimiento semanal por variable (solo con línea elegida) -->
       <section class="widget cump-sem" id="cump-sem-card" style="display:none">
         <div class="widget-h">
-          <span class="ico ico-png"><img src="assets/brand/ic_shield.png?v=90" alt="" width="22" height="22"></span>
+          <span class="ico ico-png"><img src="assets/brand/ic_shield.png?v=91" alt="" width="22" height="22"></span>
           <div class="min-w-0"><h3>Cumplimiento semanal por variable exigida</h3><span class="sub">evolución semana a semana</span></div>
           <div class="cs-controls ml-auto">
             <div class="seg" id="cs-dia"></div>
@@ -553,7 +557,7 @@ tailwind.config = {
      style="position:fixed;right:8px;bottom:6px;z-index:1200;font:500 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim,#64748b);background:rgba(10,15,28,.55);border:1px solid var(--line,#1e293b);border-radius:6px;padding:3px 7px;backdrop-filter:blur(6px);pointer-events:none;opacity:.78">act. —</div>
 
 <script src="assets/echarts.min.js"></script>
-<script src="assets/app_shell.js?v=90"></script>
+<script src="assets/app_shell.js?v=91"></script>
 <script>
   /* Sidebar colapsable + recálculo de mapa/charts al cambiar el ancho */
   (function(){

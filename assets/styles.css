@@ -1,23 +1,30 @@
 :root{
-  --bg:#0a0e1a; --bg2:#0d1424; --panel:#111a2e; --panel2:#0f1729;
-  --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
-  --tx:#e8eef8; --muted:#93a1ba; --dim:#64718c;
-  --acc:#38bdf8; --acc2:#34d399; --warn:#fbbf24; --danger:#fb7185; --violet:#a78bfa;
-  --topbar:rgba(10,14,26,.92); --hover:rgba(255,255,255,.05); --track:rgba(255,255,255,.06); --chip:rgba(255,255,255,.06);
-  --glow1:rgba(56,189,248,.10); --glow2:rgba(52,211,153,.07);
-  --ch-grid:rgba(255,255,255,.05); --ch-axis:rgba(255,255,255,.16); --ch-tip:rgba(13,20,36,.96);
+  /* ===== Identidad "Costa del Cobre" — Antofagasta =====
+     Primario = azul Pacífico (--acc, caballo de batalla institucional).
+     Firma    = cobre (--cobre, SOLO chrome de marca: logo, línea de costa, acentos).
+     Semántico = --acc2 verde (bien/vivo) · --warn ámbar · --danger rojo (NUNCA tocan marca). */
+  --bg:#0b1416; --bg2:#0e1a1d; --panel:#122225; --panel2:#0f1c1f;
+  --line:rgba(233,239,236,.08); --line2:rgba(233,239,236,.15);
+  --tx:#e9efec; --muted:#92a39d; --dim:#5f706b;
+  --acc:#38acc9; --acc2:#34c08c; --warn:#fbbf24; --danger:#fb7185; --violet:#a78bfa;
+  --cobre:#c47a45; --cobre-strong:#b0612e; --cobre-soft:rgba(196,122,69,.14);
+  --topbar:rgba(11,20,22,.92); --hover:rgba(233,239,236,.05); --track:rgba(233,239,236,.06); --chip:rgba(233,239,236,.06);
+  --glow1:rgba(56,172,201,.10); --glow2:rgba(196,122,69,.06);
+  --ch-grid:rgba(233,239,236,.05); --ch-axis:rgba(233,239,236,.16); --ch-tip:rgba(15,28,31,.96);
   --radius:16px; --radius-sm:11px;
-  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
-  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --display:"IBM Plex Sans Condensed","IBM Plex Sans",-apple-system,"Segoe UI",sans-serif;
 }
 :root[data-theme="light"]{
-  --bg:#eef2f7; --bg2:#e6ecf3; --panel:#ffffff; --panel2:#f6f9fc;
-  --line:rgba(15,23,42,.10); --line2:rgba(15,23,42,.18);
-  --tx:#0f1d31; --muted:#4a5a72; --dim:#7686a0;
-  --acc:#0284c7; --acc2:#059669; --warn:#b45309; --danger:#e11d48; --violet:#7c3aed;
-  --topbar:rgba(255,255,255,.9); --hover:rgba(15,23,42,.05); --track:rgba(15,23,42,.09); --chip:rgba(15,23,42,.06);
-  --glow1:rgba(2,132,199,.10); --glow2:rgba(5,150,105,.08);
-  --ch-grid:rgba(15,23,42,.07); --ch-axis:rgba(15,23,42,.22); --ch-tip:rgba(255,255,255,.97);
+  --bg:#eef1f0; --bg2:#e6ecea; --panel:#ffffff; --panel2:#f5f8f7;
+  --line:rgba(15,32,36,.10); --line2:rgba(15,32,36,.18);
+  --tx:#13262b; --muted:#4d5f5b; --dim:#7686a0;
+  --acc:#1f7e96; --acc2:#2f8f78; --warn:#b45309; --danger:#e11d48; --violet:#7c3aed;
+  --cobre:#a85d2c; --cobre-strong:#8c4a20; --cobre-soft:rgba(168,93,44,.12);
+  --topbar:rgba(255,255,255,.9); --hover:rgba(15,32,36,.05); --track:rgba(15,32,36,.09); --chip:rgba(15,32,36,.06);
+  --glow1:rgba(31,126,150,.10); --glow2:rgba(168,93,44,.08);
+  --ch-grid:rgba(15,32,36,.07); --ch-axis:rgba(15,32,36,.22); --ch-tip:rgba(255,255,255,.97);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
@@ -30,29 +37,44 @@ body{
 }
 .wrap{max-width:1280px;margin:0 auto;padding:0 24px}
 
+/* Tipografía de señalética: titulares en IBM Plex Sans Condensed (display) */
+.brand h1,.hero h2,.sec-head h3,.scope h2,.scope h3,.method h3,.widget-h h3,#scope-title,#map-title{
+  font-family:var(--display);letter-spacing:.005em}
+
+/* La línea de costa — firma. Codifica la geografía lineal del eje costero.
+   Regla de cobre con marcas periódicas; única pieza llamativa, todo lo demás queda quieto. */
+.coastline{flex:none;height:7px;position:relative;z-index:41;
+  background:linear-gradient(90deg,transparent,var(--cobre) 9%,var(--cobre) 91%,transparent) bottom/100% 1.5px no-repeat}
+.coastline::after{content:"";position:absolute;inset:0 0 1.5px 0;
+  background-image:repeating-linear-gradient(90deg,var(--cobre) 0 1px,transparent 1px 72px);
+  -webkit-mask:linear-gradient(180deg,transparent,#000);mask:linear-gradient(180deg,transparent,#000);opacity:.55}
+
+/* Foco visible de teclado (piso de calidad) */
+:focus-visible{outline:2px solid var(--cobre);outline-offset:2px;border-radius:4px}
+
 /* Header */
 header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
   background:var(--topbar);border-bottom:1px solid var(--line)}
 .nav{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;max-width:1280px;margin:0 auto;gap:16px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:13px;min-width:0}
 .logo{width:42px;height:42px;border-radius:12px;flex:none;
-  background:linear-gradient(135deg,#38bdf8,#34d399);display:grid;place-items:center;
-  font-weight:800;color:#06121f;font-size:18px;box-shadow:0 6px 22px rgba(56,189,248,.32)}
+  background:linear-gradient(135deg,var(--cobre),var(--cobre-strong));display:grid;place-items:center;
+  font-family:var(--display);font-weight:700;color:#1c1206;font-size:15px;letter-spacing:.02em;box-shadow:0 6px 22px rgba(196,122,69,.32)}
 .brand h1{font-size:16px;font-weight:700;letter-spacing:-.01em;line-height:1.2}
 .brand p{font-size:12px;color:var(--muted);font-weight:500}
 .nav-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .pill{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;
   padding:7px 13px;border-radius:999px;border:1px solid var(--line2);color:var(--muted);background:rgba(255,255,255,.03)}
-.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--acc2);box-shadow:0 0 0 3px rgba(52,211,153,.18)}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--acc2);box-shadow:0 0 0 3px rgba(52,192,140,.18)}
 .pill a{color:var(--acc);text-decoration:none}
 .ghbtn{color:var(--tx);text-decoration:none}
 .ghbtn:hover{color:var(--acc)}
 
 /* Hero */
 .hero{padding:46px 0 14px}
-.eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--acc);margin-bottom:14px}
-.hero h2{font-size:clamp(28px,4vw,44px);font-weight:800;letter-spacing:-.025em;line-height:1.08;max-width:18ch}
-.hero h2 .grad{background:linear-gradient(120deg,#38bdf8,#34d399 70%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--cobre);margin-bottom:14px}
+.hero h2{font-size:clamp(28px,4vw,44px);font-weight:700;letter-spacing:-.015em;line-height:1.08;max-width:18ch}
+.hero h2 .grad{background:linear-gradient(120deg,var(--acc),var(--cobre) 85%);-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero p{margin-top:16px;color:var(--muted);max-width:62ch;font-size:16px}
 
 /* KPI grid */
@@ -61,7 +83,7 @@ header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
   border-radius:var(--radius);padding:24px;position:relative;overflow:hidden;transition:.22s}
 .kpi:hover{transform:translateY(-3px);border-color:var(--line2)}
 .kpi::after{content:"";position:absolute;inset:0 0 auto 0;height:3px;
-  background:linear-gradient(90deg,var(--acc),var(--acc2));opacity:.0;transition:.22s}
+  background:linear-gradient(90deg,var(--cobre),var(--acc));opacity:.0;transition:.22s}
 .kpi:hover::after{opacity:.9}
 .kpi .lab{font-size:14px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:8px}
 .kpi .val{font-family:var(--mono);font-size:32px;font-weight:700;letter-spacing:-.02em;margin-top:14px;line-height:1;color:var(--tx)}
@@ -80,11 +102,11 @@ header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
 /* Sections */
 section.block{padding:30px 0}
 .sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px;flex-wrap:wrap}
-.sec-head h3{font-size:21px;font-weight:700;letter-spacing:-.02em}
-.sec-head .tag{font-size:12px;color:var(--acc);font-weight:700;letter-spacing:.1em;text-transform:uppercase}
-.sec-head .tag.live{color:#34d399;display:inline-flex;align-items:center;gap:7px}
-.livedot{width:8px;height:8px;border-radius:50%;background:#34d399;box-shadow:0 0 0 0 rgba(52,211,153,.6);animation:pulse 1.8s infinite}
-@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.5)}70%{box-shadow:0 0 0 9px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+.sec-head h3{font-size:21px;font-weight:700;letter-spacing:-.01em}
+.sec-head .tag{font-size:12px;color:var(--cobre);font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+.sec-head .tag.live{color:var(--acc2);display:inline-flex;align-items:center;gap:7px}
+.livedot{width:8px;height:8px;border-radius:50%;background:var(--acc2);box-shadow:0 0 0 0 rgba(52,192,140,.6);animation:pulse 1.8s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,192,140,.5)}70%{box-shadow:0 0 0 9px rgba(52,192,140,0)}100%{box-shadow:0 0 0 0 rgba(52,192,140,0)}}
 .sec-desc{color:var(--muted);max-width:74ch;margin-bottom:20px;font-size:14.5px}
 
 .grid{display:grid;gap:18px}
@@ -98,7 +120,7 @@ section.block{padding:30px 0}
 .chart.tall{height:420px}
 .chart.heat{height:460px}
 .chart.xl{height:540px}
-.chart.map{height:580px;background:rgba(56,189,248,.02);border-radius:var(--radius-sm)}
+.chart.map{height:580px;background:rgba(56,172,201,.02);border-radius:var(--radius-sm)}
 
 /* footer / methodology */
 .method{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:var(--radius);padding:26px;margin:18px 0 8px}
@@ -114,3 +136,5 @@ footer a{color:var(--acc);text-decoration:none}
 
 @media(max-width:1000px){.kpis{grid-template-columns:repeat(2,1fr)}.g2,.g3{grid-template-columns:1fr}.method dl{grid-template-columns:1fr}}
 @media(max-width:560px){.kpis{grid-template-columns:1fr}.wrap{padding:0 16px}.nav{padding:12px 16px}}
+
+@media(prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}}
