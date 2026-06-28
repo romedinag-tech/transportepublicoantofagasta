@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=89`).then(r=>r.json());
-const BUILD = "afta-v40";
+const J = n => fetch(`data/${n}?v=90`).then(r=>r.json());
+const BUILD = "afta-v41";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -961,20 +961,21 @@ function lineaFreqPeriodo(linea, per){     // buses/h observados de la línea en
 const nseColors = {0:"#fb923c", 1:"#94a3b8", 2:"#2dd4bf"};   // bajo / medio / alto
 const nseLabel  = n => n===0?"NSE bajo":n===1?"NSE medio":n===2?"NSE alto":"sin dato NSE";
 function drawModal(){
-  // Coropleta de manzanas por cantidad de personas que usan el modo elegido (Censo 2024)
+  // Coropleta de manzanas por % del modo elegido dentro del total de la manzana (Censo 2024)
   if(!coverLayer) return; coverLayer.clearLayers();
   if(!COB||!COB.features){ setCoverLegend("modal"); return; }
   const k = "tm_"+state.modalTr;
   const baseCol = MODO_COLORS[state.modalTr] || "#22d3ee";
-  // escala por p95 para que la coropleta no la dominen los outliers
-  const vals = COB.features.map(f=>f.properties[k]||0).filter(v=>v>0).sort((a,b)=>a-b);
-  const ref = vals.length ? (vals[Math.floor(vals.length*0.95)] || 1) : 1;
   COB.features.forEach(f=>{ const p=f.properties; if(!inComuna(p.cy,p.cx)) return;
-    const v = p[k]||0; if(!v) return;
-    const t = Math.min(1, v/ref);
-    const op = 0.18 + 0.72*Math.sqrt(t);    // sqrt para resaltar más las zonas medias
+    const v = p[k]||0;
+    const tot = (p.tm_pub||0)+(p.tm_auto||0)+(p.tm_cam||0)+(p.tm_bici||0)+(p.tm_moto||0)+(p.tm_otros||0);
+    if(tot<3) return;          // manzanas con pocos datos: no pintar (ruidoso)
+    const frac = v/tot;
+    if(frac<=0) return;
+    // opacidad ∝ fracción del modo en la manzana (0% → tenue · 100% → muy vívido)
+    const op = 0.12 + 0.80*frac;
     mzRings(f).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:baseCol,fillOpacity:op})
-      .bindTooltip(`<b>Manzana</b> · ${fmt(p.hog)} hogares · ${fmt(p.per)} personas<br><b style="color:${baseCol}">${modoLbl(state.modalTr)}: ${fmt(v)}</b> personas (Censo 2024)`,{sticky:true}).addTo(coverLayer));
+      .bindTooltip(`<b>Manzana</b> · ${fmt(p.hog)} hogares · ${fmt(tot)} viajes Censo<br><b style="color:${baseCol}">${modoLbl(state.modalTr)}: ${(frac*100).toFixed(0)}%</b> (${fmt(v)} personas)`,{sticky:true}).addTo(coverLayer));
   });
   setCoverLegend("modal");
 }
@@ -1278,7 +1279,7 @@ function setCoverLegend(mode){
     : mode==="det" ? ["Congestión en tránsito (semáforos / tacos)",`<span class="grad" style="background:linear-gradient(90deg,hsl(45,85%,52%),hsl(0,85%,52%))"></span>`,"<span class='lbls'><i>menor</i><i>mayor</i></span><span class='par'>tamaño = tiempo detenido · <b style='color:#22d3ee'>▣</b> terminal (flota al pasar)</span>"]
     : mode==="detpar" ? ["Detención de servicio por paradero (s/bus·día)",`<span class="grad" style="background:linear-gradient(90deg,hsl(48,88%,52%),hsl(0,88%,52%))"></span>`,"<span class='lbls'><i>0</i><i>90</i><i>180+</i></span><span class='par'>tiempo de subida/bajada de pasajeros en cada parada</span>"]
     : mode==="term" ? ["Red de terminales y cabeceras",`<span style="display:inline-block;width:14px;height:14px;border:1.5px solid #22d3ee;background:rgba(34,211,238,.15);border-radius:50%;vertical-align:middle"></span>`,"<span class='par'><b style='color:#22d3ee'>▣</b> terminal · tamaño del anillo = flota que opera desde ahí · hover = líneas</span>"]
-    : mode==="modal" ? [`Demanda Censo 2024 · ${modoLbl(state.modalTr)}`,`<span class="grad" style="background:linear-gradient(90deg,rgba(0,0,0,0),${MODO_COLORS[state.modalTr]||'#22d3ee'})"></span>`,"<span class='lbls'><i>pocos</i><i>muchos</i></span><span class='par'>opacidad ∝ √(personas/p95) · cómo se mueve la gente al trabajo/estudio</span>"]
+    : mode==="modal" ? [`Demanda Censo 2024 · ${modoLbl(state.modalTr)} (% en la manzana)`,`<span class="grad" style="background:linear-gradient(90deg,rgba(0,0,0,0),${MODO_COLORS[state.modalTr]||'#22d3ee'})"></span>`,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>opacidad ∝ participación del modo dentro de la manzana</span>"]
     : ["NSE (avalúo CLP/m²)",`<span class="grad" style="background:linear-gradient(90deg,hsl(205,68%,52%),hsl(118,68%,52%),hsl(30,68%,52%))"></span>`,"<span class='lbls'><i>bajo</i><i></i><i>alto</i></span>"];
   coverLegend = L.control({position:"bottomleft"});
   coverLegend.onAdd = ()=>{ const d=L.DomUtil.create("div","speedleg"); d.innerHTML=`<b>${txt[0]}</b>${txt[1]}${txt[2]}`; return d; };
