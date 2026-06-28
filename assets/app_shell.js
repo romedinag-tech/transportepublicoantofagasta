@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=80`).then(r=>r.json());
-const BUILD = "afta-v31";
+const J = n => fetch(`data/${n}?v=81`).then(r=>r.json());
+const BUILD = "afta-v32";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -15,6 +15,7 @@ let PDWELL={paraderos:[],reparto:{}};
 let CLINE={lineas:[],nse:{}};
 let SALT=null, salidasChart=null;
 let VD=null, vdChart=null, vdMarker=null;
+let BUNCH=null;
 function _haversineM(a,b){ const R=6371000, la1=a[0]*Math.PI/180, la2=b[0]*Math.PI/180, dla=(b[0]-a[0])*Math.PI/180, dlo=(b[1]-a[1])*Math.PI/180;
   const h=Math.sin(dla/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dlo/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
 function lineaShapePrincipal(linea, s){
@@ -271,6 +272,7 @@ function render(){
   renderMapa();
   renderLineaKpis();
   renderCoverTable();
+  renderBunchTable();
   renderRanking();
   renderCump();
   renderCumpSem();
@@ -850,23 +852,41 @@ function drawTerminales(){
 }
 function drawBunching(){
   if(!coverLayer) return; coverLayer.clearLayers();
-  const per = RFREQ && RFREQ.per && RFREQ.per[state.periodo];
-  if(!CONGRED || !CONGRED.roads || !per){ setCoverLegend("bunch"); return; }
-  const CV = per.cv, F = per.f, lbl = periodoLbl(state.periodo);
-  CONGRED.roads.forEach(rd=>{
-    const P=rd.p, C=rd.c;
-    for(let i=0;i<P.length-1;i++){
-      const a=C[i], b=C[i+1];
-      if(a<0||b<0) continue;
-      const ca=CV[a], cb=CV[b];
-      if(ca==null||cb==null) continue;
-      if(!inComuna((P[i][0]+P[i+1][0])/2,(P[i][1]+P[i+1][1])/2)) continue;
-      const cv=(ca+cb)/2, f=((F[a]||0)+(F[b]||0))/2;
-      L.polyline([P[i],P[i+1]],{renderer:coverCanvas,color:cvColor(cv),weight:3.6,opacity:.85,lineCap:"round"})
-        .bindTooltip(`${rd.n?rd.n+" · ":""}CV ${cv.toFixed(2)} · ${Math.round(f)} bus/h del eje (${lbl})<br>${cv>0.7?"buses apelotonados":cv>0.5?"regularidad media":"servicio regular"}`,{sticky:true}).addTo(coverLayer);
-    }
+  if(!BUNCH||!BUNCH.lineas||!GEOM){ setCoverLegend("bunch"); return; }
+  const per = state.periodo, dia = "L", lbl = periodoLbl(per);
+  const lineas = state.linea!=="TODAS" ? [state.linea] : Object.keys(GEOM);
+  lineas.forEach(lb=>{
+    const d = BUNCH.lineas[lb] && BUNCH.lineas[lb][dia] && BUNCH.lineas[lb][dia][per];
+    if(!d || d.cv==null) return;
+    const cv = d.cv, hw = d.headway, n = d.n;
+    const col = cvColor(cv);
+    (GEOM[lb]||[]).forEach(seg=>{
+      if(!seg.p||seg.p.length<2) return;
+      L.polyline(seg.p,{renderer:coverCanvas,color:col,weight:3.2,opacity:.92,lineCap:"round"})
+        .bindTooltip(`<b>Línea ${lb}</b> · ${lbl}<br>CV de headways: <b>${cv}</b><br>headway medio ${hw} min · ${n} intervalos<br>${cv>0.7?"buses apelotonados":cv>0.5?"regularidad media":"servicio regular"}`,{sticky:true}).addTo(coverLayer);
+    });
   });
   setCoverLegend("bunch");
+}
+function renderBunchTable(){
+  const el=$("cover-table"); if(!el) return;
+  if(state.mapMode!=="bunch" || state.vista!=="normal" || state.linea!=="TODAS" || !BUNCH||!BUNCH.lineas){ return; }
+  // Tabla comparativa por línea × período (día laboral)
+  const periodos = BUNCH.periodos || ["am","md","pm","off","noche","agg"];
+  const lineas = Object.keys(BUNCH.lineas).sort((a,b)=>(a[0]>='0'&&a[0]<='9'?+a:1e9)-(b[0]>='0'&&b[0]<='9'?+b:1e9));
+  const cvCell = cv => { if(cv==null) return `<td style="color:var(--dim)">—</td>`;
+    const hue = Math.max(0,Math.min(1, 1-(cv-0.3)/0.7))*120;   // 0.3→verde, 1.0+→rojo
+    return `<td style="background:hsla(${hue},75%,45%,.45);font-weight:600">${cv.toFixed(2)}</td>`; };
+  let html=`<div class="cap"><b>Bunching</b> · CV de los headways de salida desde terminales por línea × período (día laboral). <b>Verde</b> regular (≤0.5) · <b>amarillo</b> medio · <b>rojo</b> apelotonado (≥0.8). El headway medio (min) entre paréntesis.</div>`;
+  html+=`<table><thead><tr><th class="l">Línea</th>${periodos.map(p=>`<th>${periodoLbl(p)}</th>`).join("")}</tr></thead><tbody>`;
+  lineas.forEach(lb=>{
+    html+=`<tr><td class="l grp">${lb}</td>`;
+    periodos.forEach(p=>{ const d=BUNCH.lineas[lb]["L"][p]||{};
+      html += cvCell(d.cv).replace("</td>", ` <span style="color:var(--dim);font-weight:400">(${d.headway??"—"})</span></td>`); });
+    html+=`</tr>`;
+  });
+  el.innerHTML = html+`</tbody></table>`;
+  el.style.display="";
 }
 // --- Cobertura (Censo 2024): manzanas coloreadas por cobertura estática u oferta ---
 function mzRings(f){   // anillos exteriores [latlng] para Polygon / MultiPolygon
@@ -1816,6 +1836,7 @@ function renderEvolucion(){
     J("cobertura_lineas.json").then(d=>{ CLINE=d; if(state.mapMode==="cover") renderCoverTable(); }).catch(()=>{});
     J("salidas_terminal.json").then(d=>{ SALT=d; renderSalidas(); }).catch(()=>{});
     J("perfil_vel_dist.json").then(d=>{ VD=d; renderVelDist(); }).catch(()=>{});
+    J("bunching.json").then(d=>{ BUNCH=d; if(state.mapMode==="bunch") renderMapa(); }).catch(()=>{});
     J("destinos_principales.json").then(d=>{ DEST=d; if(state.mapMode==="cover"||state.mapMode==="trans") renderMapa(); }).catch(()=>{});
     J("paraderos_espera.json").then(d=>{ PESP=d; if(state.mapMode==="wait") renderMapa(); }).catch(()=>{});
     J("empresa_stats.json").then(d=>{ EMPR=d; renderEmpresas(); }).catch(()=>{});
