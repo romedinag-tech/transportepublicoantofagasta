@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=81`).then(r=>r.json());
-const BUILD = "afta-v32";
+const J = n => fetch(`data/${n}?v=82`).then(r=>r.json());
+const BUILD = "afta-v33";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -950,6 +950,29 @@ function drawOferta(){
 function renderLineaKpis(){
   const el=$("linea-kpis"); if(!el) return;
   const mode=state.mapMode;
+  // BUNCHING: KPIs específicos por línea
+  if(state.linea!=="TODAS" && state.vista==="normal" && mode==="bunch" && BUNCH&&BUNCH.lineas){
+    const lb = state.linea, dia="L";
+    const d = BUNCH.lineas[lb] && BUNCH.lineas[lb][dia] || {};
+    const per = state.periodo, dp = d[per]||{};
+    const cv = dp.cv, hw = dp.headway, n = dp.n;
+    const dAm = (d.am||{}).cv, dMd=(d.md||{}).cv, dPm=(d.pm||{}).cv, dAgg=(d.agg||{}).cv, dNoche=(d.noche||{}).cv;
+    const sisCv = BUNCH.sistema && BUNCH.sistema[dia] && BUNCH.sistema[dia][per] && BUNCH.sistema[dia][per].cv;
+    const cvLbl = v => v==null?"—":(v<0.5?"Regular":v<0.8?"Medio":"Apelotonado");
+    const cvBg = v => v==null?"":`background:hsla(${Math.max(0,Math.min(1,1-(v-0.3)/0.7))*120},75%,45%,.4)`;
+    const card = (cls,lab,val,sub,style="")=>`<div class="lk ${cls}" style="${style}"><div class="lab">${lab}</div><div class="val">${val}</div><div class="sub">${sub}</div></div>`;
+    el.style.display="grid";
+    el.innerHTML = [
+      card("b-tot",`📊 CV headways (${periodoLbl(per)})`, cv!=null?cv.toFixed(2):"—", `${cvLbl(cv)} · ${n||0} intervalos`, cvBg(cv)),
+      card("b-eff","⏱️ Headway medio", hw!=null?hw.toFixed(1)+" min":"—", `intervalo entre buses (${periodoLbl(per)})`),
+      card("b-bajo","Vs. sistema", sisCv!=null?(cv!=null?((cv-sisCv).toFixed(2)):"—"):"—",
+        sisCv!=null?`sistema ${sisCv.toFixed(2)} · ${cv!=null && cv<sisCv?"mejor":cv!=null?"peor":"—"}`:"sin referencia"),
+      card("b-med","CV AM punta", dAm!=null?dAm.toFixed(2):"—", cvLbl(dAm), cvBg(dAm)),
+      card("b-alto","CV PM punta", dPm!=null?dPm.toFixed(2):"—", cvLbl(dPm), cvBg(dPm)),
+      card("b-cic","CV Noche", dNoche!=null?dNoche.toFixed(2):"—", cvLbl(dNoche), cvBg(dNoche)),
+    ].join("");
+    return;
+  }
   const show = state.linea!=="TODAS" && state.vista==="normal" && (mode==="cover"||mode==="oferta") && COB && COB.features;
   if(!show){ el.style.display="none"; el.innerHTML=""; return; }
   // 1) hogares cubiertos + segmentación NSE sobre manzanas en el buffer de la línea
