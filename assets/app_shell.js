@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=77`).then(r=>r.json());
-const BUILD = "afta-v28";
+const J = n => fetch(`data/${n}?v=78`).then(r=>r.json());
+const BUILD = "afta-v29";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -650,6 +650,28 @@ function coveredManzanas(linea, R=300){
   });
   return _covCache[key]=set;
 }
+// --- Cobertura DINÁMICA: cápsula 2 min por bus -> fracción de tiempo cubierta ---
+function frecLineaPerDia(linea, per, dia){
+  const d = CUMP&&CUMP.lineas&&CUMP.lineas[linea]; if(!d||!d.obs||!d.obs[dia]||!CUMP.horas) return 0;
+  const arr=d.obs[dia], HC=CUMP.horas, hrs=PERIODO_H[per]||HC; let s=0,k=0;
+  hrs.forEach(h=>{ const i=HC.indexOf(h); if(i>=0&&arr[i]>0){ s+=arr[i]; k++; } });
+  return k? s/k : 0;
+}
+const fracDinLinea = f => Math.min(1, (f||0)/30);    // 30 bus/h ⇒ cobertura continua (1)
+let _invCov=null;                                    // manzana_idx -> [lineas]
+function lineasPorManzana(){
+  if(_invCov) return _invCov;
+  const inv = {}; Object.keys(GEOM||{}).forEach(lb=>{
+    coveredManzanas(lb).forEach(i=>{ (inv[i]||(inv[i]=[])).push(lb); });
+  });
+  _invCov = inv; return _invCov;
+}
+function pTotalManzana(idx, per, dia){
+  const lineas = lineasPorManzana()[idx]||[]; let q=1;
+  for(const lb of lineas){ q *= (1 - fracDinLinea(frecLineaPerDia(lb, per, dia))); }
+  return 1 - q;
+}
+const dinColor = p => `hsl(${120*Math.min(1,Math.max(0,p))},70%,46%)`;   // 0 rojo -> 1 verde
 let _segCache={};
 function _lineSegs(linea){
   if(_segCache[linea]) return _segCache[linea];
@@ -848,54 +870,70 @@ function drawCobertura(){
 function drawOferta(){
   if(!coverLayer) return; coverLayer.clearLayers();
   if(!COB||!COB.features){ setCoverLegend("oferta"); return; }
-  const per=state.periodo, lbl=periodoLbl(per);
+  const per=state.periodo, lbl=periodoLbl(per), dia="L";
   const lset = state.linea!=="TODAS" ? coveredManzanas(state.linea) : null;
-  const lf = lset ? (lineaFreqPeriodo(state.linea, per)||0) : 0;   // buses/h de la línea (uniforme en su cobertura)
-  COB.features.forEach((f,idx)=>{ const p=f.properties; if(!inComuna(p.cy,p.cx)) return;
-    if(lset && !lset.has(idx)) return;
-    if(lset){
-      mzRings(f).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:ofertaColor(lf),fillOpacity:.55})
-        .bindTooltip(`<b>Manzana</b> · ${fmt(p.hog)} hogares<br>oferta de la línea ${state.linea} (${lbl}): <b>${lf}</b> bus/h · ${Math.round(lf*27)} pers/h`,{sticky:true}).addTo(coverLayer));
-      return;
-    }
-    const bp=(p.cob_of&&p.cob_of[per]!=null)?p.cob_of[per]:0;
-    const bo=(p.cob_of_obs&&p.cob_of_obs[per]!=null)?p.cob_of_obs[per]:0;
-    mzRings(f).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:ofertaColor(bp),fillOpacity:.6})
-      .bindTooltip(`<b>Oferta</b> (${lbl}) · ${p.cob_nl||0} líneas<br>programado: <b>${bp}</b> bus/h · ${Math.round(bp*27)} pers/h<br>observado (GPS): <b>${bo}</b> bus/h`,{sticky:true}).addTo(coverLayer));
-  });
+  if(lset){
+    const f = frecLineaPerDia(state.linea, per, dia);
+    const frac = fracDinLinea(f);
+    const head = f>0 ? (60/f).toFixed(1) : "∞";
+    COB.features.forEach((f0, idx)=>{ const p=f0.properties; if(!inComuna(p.cy,p.cx)) return;
+      if(!lset.has(idx)) return;
+      mzRings(f0).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:dinColor(frac),fillOpacity:.55})
+        .bindTooltip(`<b>Manzana</b> · ${fmt(p.hog)} hogares<br>Línea ${state.linea} (${lbl}): <b>${f.toFixed(1)}</b> bus/h · headway ${head} min<br>cobertura dinámica: <b>${(frac*100).toFixed(0)}%</b> del tiempo`,{sticky:true}).addTo(coverLayer));
+    });
+  } else {
+    // SISTEMA: coropleta por P_total
+    COB.features.forEach((f0,idx)=>{ const p=f0.properties; if(!inComuna(p.cy,p.cx)) return;
+      const P = pTotalManzana(idx, per, dia); if(P<=0) return;
+      const ls = (lineasPorManzana()[idx]||[]);
+      const bp=(p.cob_of&&p.cob_of[per]!=null)?p.cob_of[per]:0;
+      const bo=(p.cob_of_obs&&p.cob_of_obs[per]!=null)?p.cob_of_obs[per]:0;
+      mzRings(f0).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:dinColor(P),fillOpacity:.6})
+        .bindTooltip(`<b>Manzana</b> · ${fmt(p.hog)} hogares · ${ls.length} líneas<br><b>Cobertura dinámica: ${(P*100).toFixed(0)}%</b> del tiempo (${lbl})<br>programado: ${bp} bus/h · observado: ${bo} bus/h`,{sticky:true}).addTo(coverLayer));
+    });
+  }
   setCoverLegend("oferta");
 }
 function renderLineaKpis(){
   const el=$("linea-kpis"); if(!el) return;
-  const show = state.linea!=="TODAS" && state.vista==="normal" && state.mapMode==="cover" && COB && COB.features;
+  const mode=state.mapMode;
+  const show = state.linea!=="TODAS" && state.vista==="normal" && (mode==="cover"||mode==="oferta") && COB && COB.features;
   if(!show){ el.style.display="none"; el.innerHTML=""; return; }
   // 1) hogares cubiertos + segmentación NSE sobre manzanas en el buffer de la línea
   const cm = coveredManzanas(state.linea);
-  let hog=0, hbaj=0, hmed=0, halt=0, hsn=0;
+  let hog=0, hbaj=0, hmed=0, halt=0;
   cm.forEach(i=>{ const p=COB.features[i].properties, h=p.hog||0;
     hog+=h;
-    if(p.nse===0) hbaj+=h; else if(p.nse===1) hmed+=h; else if(p.nse===2) halt+=h; else hsn+=h;
+    if(p.nse===0) hbaj+=h; else if(p.nse===1) hmed+=h; else if(p.nse===2) halt+=h;
   });
-  // 2) extensión y hog/km desde CLINE (fila rec==linea o el más cubierto)
   const row = (CLINE&&CLINE.lineas||[]).find(r=>r.linea===state.linea && r.rec===state.linea)
               || (CLINE&&CLINE.lineas||[]).find(r=>r.linea===state.linea);
   const ext = row ? row.ext_km : null;
-  const hogkm = ext ? Math.round(hog/ext) : null;
-  // 3) ciclos/bus/día = (salidas L) / flota_total / 2
   const flota = T&&T.cells&&T.cells["TODAS|"+state.linea]&&T.cells["TODAS|"+state.linea].kpi&&T.cells["TODAS|"+state.linea].kpi.flota_total || null;
   const salL = SALT&&SALT.por_linea&&SALT.por_linea[state.linea]&&SALT.por_linea[state.linea].L || null;
   const totSal = salL ? salL.reduce((a,b)=>a+b,0) : null;
   const ciclos = (flota && totSal) ? (totSal/flota/2) : null;
   const tcMin = T&&T.cells&&T.cells["TODAS|"+state.linea]&&T.cells["TODAS|"+state.linea].kpi&&T.cells["TODAS|"+state.linea].kpi.tc || null;
   const nse = (COB.resumen&&COB.resumen.cob_est&&COB.resumen.cob_est.nse_terciles)||{};
-  const pct = n => hog ? Math.round(100*n/hog) : 0;
   const card = (cls,lab,val,sub)=>`<div class="lk ${cls}"><div class="lab">${lab}</div><div class="val">${val}</div><div class="sub">${sub}</div></div>`;
+  // multiplicador dinámico (solo en modo oferta)
+  let frac=1, lbl="";
+  if(mode==="oferta"){
+    const f = frecLineaPerDia(state.linea, state.periodo, "L");
+    frac = fracDinLinea(f);
+    lbl = ` · ${(frac*100).toFixed(0)}% del tiempo (${periodoLbl(state.periodo)})`;
+  }
+  const ajust = n => Math.round(n*frac);
+  const pct = n => hog ? Math.round(100*n/hog) : 0;
+  const hogD = ajust(hog), hbajD=ajust(hbaj), hmedD=ajust(hmed), haltD=ajust(halt);
+  const hogkm = ext ? Math.round(hogD/ext) : null;
   el.style.display="grid";
   el.innerHTML = [
-    card("b-tot","🏠 Hogares cubiertos", NF.format(Math.round(hog)), `${cm.size} manzanas · buffer 300 m`),
-    card("b-bajo","NSE bajo", NF.format(Math.round(hbaj)), `${pct(hbaj)}% · ≤ ${nse.bajo??"—"} años escolaridad`),
-    card("b-med","NSE medio", NF.format(Math.round(hmed)), `${pct(hmed)}% · entre ${nse.bajo??"—"} y ${nse.alto??"—"}`),
-    card("b-alto","NSE alto", NF.format(Math.round(halt)), `${pct(halt)}% · > ${nse.alto??"—"} años`),
+    card("b-tot", mode==="oferta"?"🏠 Hogares cubiertos · dinámico":"🏠 Hogares cubiertos", NF.format(hogD),
+      mode==="oferta" ? `${cm.size} manzanas · cápsula 2 min${lbl}` : `${cm.size} manzanas · buffer 300 m`),
+    card("b-bajo","NSE bajo", NF.format(hbajD), `${pct(hbaj)}% · ≤ ${nse.bajo??"—"} años escolaridad`),
+    card("b-med","NSE medio", NF.format(hmedD), `${pct(hmed)}% · entre ${nse.bajo??"—"} y ${nse.alto??"—"}`),
+    card("b-alto","NSE alto", NF.format(haltD), `${pct(halt)}% · > ${nse.alto??"—"} años`),
     card("b-eff","📏 Hog. por km", hogkm!=null?NF.format(hogkm):"—", `extensión ${ext??"—"} km (ida)`),
     card("b-cic","🔁 Ciclos/bus/día", ciclos!=null?ciclos.toFixed(1):"—", tcMin?`tiempo de ciclo ${Math.round(tcMin)} min · ${flota||"—"} buses`:`—`),
   ].join("");
@@ -1011,7 +1049,7 @@ function setCoverLegend(mode){
   const RYG = `<span class="grad" style="background:linear-gradient(90deg,hsl(120,72%,50%),hsl(60,72%,50%),hsl(0,72%,50%))"></span>`;
   const GYR = `<span class="grad" style="background:linear-gradient(90deg,hsl(0,70%,50%),hsl(60,70%,50%),hsl(120,70%,50%))"></span>`;
   const txt = mode==="cover" ? ["Cobertura estática (% del área a ≤300 m de la red)",GYR,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>color de la manzana = fracción cubierta · rojo lejos / verde cubierta</span>"]
-    : mode==="oferta" ? [`Oferta · buses/h (${periodoLbl(state.periodo)})`,GYR,"<span class='lbls'><i>0</i><i>60</i><i>120+</i></span><span class='par'>líneas cuyo buffer 300 m cubre la manzana · hover: prog vs observado</span>"]
+    : mode==="oferta" ? [`Cobertura dinámica · % del tiempo (${periodoLbl(state.periodo)})`,GYR,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>cápsula 2 min · P = 1 − Π(1 − fᵢ/30) · hover: bus/h y headway</span>"]
     : mode==="trans" ? ["Intensidad de transbordo (% de lo alcanzable)",RYG,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>verde = directo · rojo = exige transbordo</span>"]
     : mode==="wait" ? [`Espera hacia destinos · ${periodoLbl(state.periodo)} (min)`,RYG,"<span class='lbls'><i>0</i><i>1.5</i><i>3+</i></span><span class='par'>manzana = espera a destinos · ● paradero = espera ahí (hover)</span>"]
     : mode==="salud" ? ["Tiempo a salud en transporte (min)",RYG,"<span class='lbls'><i>0</i><i>12</i><i>25+</i></span><span class='par' style='color:#f43f5e'>● centro de salud</span>"]
@@ -1104,7 +1142,7 @@ function renderMapa(){
     const b=$("live-count"), R=(COB&&COB.resumen)||{};
     const M=state.mapMode;
     const RC = (R.cob_est)||{}, RO=(R.cob_of&&R.cob_of.por_periodo&&R.cob_of.por_periodo[state.periodo])||{};
-    const titulo = {cover:"Cobertura estática (Censo 2024 · 300 m)", oferta:`Cobertura dinámica · oferta · ${periodoLbl(state.periodo)}`,
+    const titulo = {cover:"Cobertura estática (Censo 2024 · 300 m)", oferta:`Cobertura dinámica · % del tiempo (${periodoLbl(state.periodo)})`,
       conges:`Velocidad ${congtipoLbl(state.congTipo).toLowerCase()} · ${periodoLbl(state.periodo)}`, bunch:`Apelotonamiento (bunching) · ${periodoLbl(state.periodo)}`, det:(state.detTipo==="par"?"Detención de servicio en paraderos":"Congestión en tránsito y terminales"), term:"Red de terminales y cabeceras"}[M];
     if(lineaView){
       $("map-title").textContent = (titulo||"") + ` · Línea ${state.linea}`;
@@ -1113,7 +1151,8 @@ function renderMapa(){
         let hg=0; if(cm) cm.forEach(i=>hg+=(COB.features[i].properties.hog||0));
         const row=(CLINE.lineas||[]).find(r=>r.linea===state.linea&&r.rec===state.linea)||(CLINE.lineas||[]).find(r=>r.linea===state.linea);
         if(M==="cover") return `Línea ${state.linea}: cubre ${cm?cm.size:0} manzanas · ${fmt(hg)} hogares a ≤300 m`;
-        if(M==="oferta") return `Línea ${state.linea}: ${lineaFreqPeriodo(state.linea,state.periodo)??"—"} bus/h (${periodoLbl(state.periodo)}) en ${cm?cm.size:0} manzanas`;
+        if(M==="oferta"){ const f=frecLineaPerDia(state.linea,state.periodo,"L"); const fr=fracDinLinea(f); const H=f>0?(60/f).toFixed(1):"∞";
+          return `Línea ${state.linea}: ${f.toFixed(1)} bus/h · headway ${H} min · cobertura dinámica <b>${(fr*100).toFixed(0)}%</b> del tiempo (${periodoLbl(state.periodo)})`; }
         if(M==="conges") return `Línea ${state.linea}: velocidad ${congtipoLbl(state.congTipo).toLowerCase()}${row&&row.vel?` ≈ <b>${row.vel}</b> km/h comercial`:""} · ${periodoLbl(state.periodo)}`;
         if(M==="det") return `Detenciones de la línea ${state.linea} (focos + terminales)`;
         if(M==="term") return `Terminales de la línea ${state.linea}`;
@@ -1121,7 +1160,12 @@ function renderMapa(){
       })();
     } else {
       const badgeSys = {cover:`${RC.pct_hog_cubiertos??"—"}% de los hogares a ≤300 m de la red · ${RC.pct_hog_80??"—"}% en manzanas ≥80% cubiertas (${fmt(RC.hogares_total||0)} hogares)`,
-        oferta:`oferta media por hogar: <b>${RO.buses_h_prog??"—"}</b> bus/h programado · ${RO.buses_h_obs??"—"} observado · ${fmt(RO.pax_h_prog||0)} personas/h (${periodoLbl(state.periodo)})`,
+        oferta:(()=>{ // % hogares con cobertura dinámica >=50% en el período
+          if(!COB||!COB.features) return "";
+          let hT=0, hCov=0; COB.features.forEach((f,idx)=>{ const h=f.properties.hog||0; hT+=h; if(pTotalManzana(idx,state.periodo,"L")>=0.5) hCov+=h; });
+          const pct = hT? (100*hCov/hT).toFixed(0):0;
+          return `${pct}% de los hogares con cobertura dinámica ≥50% del tiempo (${periodoLbl(state.periodo)}) · oferta media ${RO.buses_h_obs??"—"} bus/h observado`;
+        })(),
         conges:`velocidad ${congtipoLbl(state.congTipo).toLowerCase()} · sentido ${sentidoLbl(state.sentido)} · ${periodoLbl(state.periodo)} · rojo = ejes lentos`,
         det:(()=>{const Rp=(PDWELL&&PDWELL.reparto)||{}; return state.detTipo==="par"
           ? `${(PDWELL&&PDWELL.paraderos||[]).length} paraderos con dwell · el ${Rp.paradero??"—"}% del tiempo detenido en ruta es servicio en paraderos`
@@ -1727,7 +1771,7 @@ function renderEvolucion(){
     }).catch(()=>{ const vb=$("vfoot-build"); if(vb) vb.textContent="Visor actualizado: "+BUILD; });
     applyTheme(document.documentElement.dataset.theme==="light" ? "light" : "dark");
     J("comuna_lineas.json").then(d=>{ CLIN=d; buildLineaList($("linea-search")?$("linea-search").value:""); }).catch(()=>{});
-    J("cobertura.json").then(d=>{ COB=d; _covCache={}; renderNseGap(); if(state.mapMode!=="recorridos") renderMapa(); }).catch(()=>{});
+    J("cobertura.json").then(d=>{ COB=d; _covCache={}; _invCov=null; renderNseGap(); if(state.mapMode!=="recorridos") renderMapa(); }).catch(()=>{});
     J("flota_equidad.json").then(d=>{ EQ=d; renderEquidad(); }).catch(()=>{});
     J("operacion_linea.json").then(d=>{ OP=d; renderOperacion(); renderCalidad(); }).catch(()=>{});
     J("speed_grid_hora.json").then(d=>{ GRID=d; if(state.mapMode==="conges") renderMapa(); }).catch(()=>{});
