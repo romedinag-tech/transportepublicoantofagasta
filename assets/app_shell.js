@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=86`).then(r=>r.json());
-const BUILD = "afta-v37";
+const J = n => fetch(`data/${n}?v=87`).then(r=>r.json());
+const BUILD = "afta-v38";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -1349,6 +1349,18 @@ function renderNarrative(){
   const el=$("map-narrative"); if(!el) return;
   if(state.vista!=="normal"){ el.innerHTML=""; return; }
   if(state.linea!=="TODAS"){
+    // En vista de línea, mostrar relato del MODO (bunching/conges/etc.) cuando aplique,
+    // y caer al texto de Terminales solo en modo recorridos/det.
+    const M=state.mapMode, per=state.periodo;
+    if(M==="bunch" && BUNCH){
+      const d = BUNCH.lineas&&BUNCH.lineas[state.linea]&&BUNCH.lineas[state.linea].L&&BUNCH.lineas[state.linea].L[per];
+      const sisCv = BUNCH.sistema&&BUNCH.sistema.L&&BUNCH.sistema.L[per]&&BUNCH.sistema.L[per].cv;
+      el.innerHTML = `<b>Bunching · Línea ${state.linea}</b> en <b>${periodoLbl(per)}</b>: CV de headways = <b>${d&&d.cv!=null?d.cv:"—"}</b> (sistema ${sisCv??"—"}). El <b>CV</b> mide qué tan irregulares son los intervalos entre buses (σ/μ).
+        <br><span style="display:inline-flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px"><b style="color:#34d399">≤0.3</b> óptimo · <b style="color:#a3e635">0.3–0.5</b> regular · <b style="color:#fbbf24">0.5–0.8</b> medio · <b style="color:#fb7185">≥0.8</b> apelotonado.</span>
+        <br>Referencia: BRT bien operado ≤0.4; >1.0 problemas serios. El drape colorea cada tramo de ~400 m según su CV local — los rojos son los cuellos donde se acumulan los buses.`;
+      return;
+    }
+    // Default vista de línea: relato sobre terminales (válido para modo recorridos/det/term)
     const tl=TLIN[state.linea];
     if(tl && tl.puntos){
       const nt=tl.puntos.filter(p=>p.tipo==="terminal").length, d=tl.dist||{};
