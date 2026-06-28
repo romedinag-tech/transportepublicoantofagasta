@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=83`).then(r=>r.json());
-const BUILD = "afta-v34";
+const J = n => fetch(`data/${n}?v=84`).then(r=>r.json());
+const BUILD = "afta-v35";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -1221,6 +1221,8 @@ function renderMapa(){
       const col = colorLinea(state.linea);
       if(isRec){                              // Recorridos: trazado grueso de la línea
         L.polyline(p,{color:col,weight:4.5,opacity:0.95,lineCap:"round"}).addTo(routeLayer);
+      } else if(state.mapMode==="bunch"){      // bunch: base tenue gris (variantes), el drape encima da el color
+        L.polyline(p,{color:"rgba(148,163,184,.35)",weight:2,opacity:.85,lineCap:"round"}).addTo(routeLayer);
       } else {                                // otros modos: trazado en color fluo, más fino, sobre la coropleta
         L.polyline(p,{color:col,weight:3,opacity:0.9,lineCap:"round"}).addTo(routeLayer);
       }
