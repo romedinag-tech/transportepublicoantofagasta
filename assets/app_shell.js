@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=78`).then(r=>r.json());
-const BUILD = "afta-v29";
+const J = n => fetch(`data/${n}?v=79`).then(r=>r.json());
+const BUILD = "afta-v30";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -672,6 +672,35 @@ function pTotalManzana(idx, per, dia){
   return 1 - q;
 }
 const dinColor = p => `hsl(${120*Math.min(1,Math.max(0,p))},70%,46%)`;   // 0 rojo -> 1 verde
+// Paleta de alto contraste para 13+ líneas sobre fondo oscuro (fluo/neón)
+const LINE_PALETTE = ["#22d3ee","#fbbf24","#fb7185","#a78bfa","#7dd3fc","#bef264","#fb923c","#67e8f9","#f472b6","#facc15","#34d399","#c084fc","#fde047"];
+function colorLinea(lb){
+  if(!GEOM) return "#22d3ee";
+  const keys = Object.keys(GEOM).sort((a,b)=>(a[0]>='0'&&a[0]<='9'?+a:1e9)-(b[0]>='0'&&b[0]<='9'?+b:1e9));
+  const i = keys.indexOf(lb);
+  return LINE_PALETTE[(i>=0?i:0) % LINE_PALETTE.length];
+}
+// Distancia mínima del centroide de cada manzana al trazado de una línea (cacheado por línea)
+let _distLineCache={}, _distSysCache=null;
+function distLineaArr(linea){
+  if(_distLineCache[linea]) return _distLineCache[linea];
+  if(!COB||!COB.features) return null;
+  const segs=_lineSegs(linea); const arr=new Float32Array(COB.features.length);
+  COB.features.forEach((f,i)=>{ const c=toM(f.properties.cy,f.properties.cx); let d=1e9;
+    for(const s of segs){ const dd=_ptSeg(c[0],c[1],s[0],s[1],s[2],s[3]); if(dd<d) d=dd; }
+    arr[i]=Math.min(300, d);
+  });
+  return _distLineCache[linea]=arr;
+}
+function distMinSistemaArr(){
+  if(_distSysCache) return _distSysCache;
+  if(!COB||!COB.features) return null;
+  const arr=new Float32Array(COB.features.length);
+  for(let i=0;i<arr.length;i++) arr[i]=300;
+  Object.keys(GEOM||{}).forEach(lb=>{ const d=distLineaArr(lb); if(d) for(let i=0;i<arr.length;i++) if(d[i]<arr[i]) arr[i]=d[i]; });
+  return _distSysCache=arr;
+}
+const distToOpacity = d => 0.22 + 0.66*Math.max(0, 1 - (d||0)/300);  // 0m: 0.88 · 300m: 0.22
 let _segCache={};
 function _lineSegs(linea){
   if(_segCache[linea]) return _segCache[linea];
@@ -689,10 +718,10 @@ function drawAllRoutes(){
   let nlineas = 0, nshapes = 0;
   Object.keys(GEOM).sort((a,b)=>(a[0]>='0'&&a[0]<='9'?+a:1e9)-(b[0]>='0'&&b[0]<='9'?+b:1e9)).forEach(lb=>{
     let drew=false;
+    const col = colorLinea(lb);
     (GEOM[lb]||[]).forEach(seg=>{
       if(!seg.p || seg.p.length<2) return;
-      const col = "#"+(seg.col||"38bdf8");
-      const pl = L.polyline(seg.p,{renderer:coverCanvas,color:col,weight:2.6,opacity:.82,lineCap:"round"})
+      const pl = L.polyline(seg.p,{renderer:coverCanvas,color:col,weight:2.6,opacity:.92,lineCap:"round"})
         .bindTooltip(`Línea ${lb}`,{sticky:true});
       pl.on("click",()=>{ state.linea=lb; state.comuna="TODAS"; state.vista="normal";
         if($("linea-search")) buildLineaList($("linea-search").value); render(); });
@@ -876,20 +905,24 @@ function drawOferta(){
     const f = frecLineaPerDia(state.linea, per, dia);
     const frac = fracDinLinea(f);
     const head = f>0 ? (60/f).toFixed(1) : "∞";
+    const dArr = distLineaArr(state.linea);
     COB.features.forEach((f0, idx)=>{ const p=f0.properties; if(!inComuna(p.cy,p.cx)) return;
       if(!lset.has(idx)) return;
-      mzRings(f0).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:dinColor(frac),fillOpacity:.55})
-        .bindTooltip(`<b>Manzana</b> · ${fmt(p.hog)} hogares<br>Línea ${state.linea} (${lbl}): <b>${f.toFixed(1)}</b> bus/h · headway ${head} min<br>cobertura dinámica: <b>${(frac*100).toFixed(0)}%</b> del tiempo`,{sticky:true}).addTo(coverLayer));
+      const d = dArr?dArr[idx]:0, op=distToOpacity(d);
+      mzRings(f0).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:dinColor(frac),fillOpacity:op})
+        .bindTooltip(`<b>Manzana</b> · ${fmt(p.hog)} hogares · ${Math.round(d)} m del trazado<br>Línea ${state.linea} (${lbl}): <b>${f.toFixed(1)}</b> bus/h · headway ${head} min<br>cobertura dinámica: <b>${(frac*100).toFixed(0)}%</b> del tiempo`,{sticky:true}).addTo(coverLayer));
     });
   } else {
-    // SISTEMA: coropleta por P_total
+    // SISTEMA: coropleta por P_total, modulada por distancia al trazado más cercano
+    const dSys = distMinSistemaArr();
     COB.features.forEach((f0,idx)=>{ const p=f0.properties; if(!inComuna(p.cy,p.cx)) return;
       const P = pTotalManzana(idx, per, dia); if(P<=0) return;
       const ls = (lineasPorManzana()[idx]||[]);
+      const d = dSys?dSys[idx]:0, op=distToOpacity(d);
       const bp=(p.cob_of&&p.cob_of[per]!=null)?p.cob_of[per]:0;
       const bo=(p.cob_of_obs&&p.cob_of_obs[per]!=null)?p.cob_of_obs[per]:0;
-      mzRings(f0).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:dinColor(P),fillOpacity:.6})
-        .bindTooltip(`<b>Manzana</b> · ${fmt(p.hog)} hogares · ${ls.length} líneas<br><b>Cobertura dinámica: ${(P*100).toFixed(0)}%</b> del tiempo (${lbl})<br>programado: ${bp} bus/h · observado: ${bo} bus/h`,{sticky:true}).addTo(coverLayer));
+      mzRings(f0).forEach(ring=>L.polygon(ring,{renderer:coverCanvas,stroke:false,fillColor:dinColor(P),fillOpacity:op})
+        .bindTooltip(`<b>Manzana</b> · ${fmt(p.hog)} hogares · ${Math.round(d)} m del trazado más cercano · ${ls.length} líneas<br><b>Cobertura dinámica: ${(P*100).toFixed(0)}%</b> del tiempo (${lbl})<br>programado: ${bp} bus/h · observado: ${bo} bus/h`,{sticky:true}).addTo(coverLayer));
     });
   }
   setCoverLegend("oferta");
@@ -1103,8 +1136,8 @@ function renderMapa(){
     GEOM[state.linea].forEach(seg=>{
       const p=seg.p;
       if(isRec){                              // Recorridos: trazado coloreado de la línea
-        const col = seg.col?("#"+seg.col):"#38bdf8";
-        L.polyline(p,{color:col,weight:4,opacity:0.92,lineCap:"round"}).addTo(routeLayer);
+        const col = colorLinea(state.linea);
+        L.polyline(p,{color:col,weight:4.5,opacity:0.95,lineCap:"round"}).addTo(routeLayer);
       } else {                                // otros modos: trazado como contexto tenue
         L.polyline(p,{color:"rgba(148,161,186,.45)",weight:2,opacity:.7}).addTo(routeLayer);
       }
@@ -1771,7 +1804,7 @@ function renderEvolucion(){
     }).catch(()=>{ const vb=$("vfoot-build"); if(vb) vb.textContent="Visor actualizado: "+BUILD; });
     applyTheme(document.documentElement.dataset.theme==="light" ? "light" : "dark");
     J("comuna_lineas.json").then(d=>{ CLIN=d; buildLineaList($("linea-search")?$("linea-search").value:""); }).catch(()=>{});
-    J("cobertura.json").then(d=>{ COB=d; _covCache={}; _invCov=null; renderNseGap(); if(state.mapMode!=="recorridos") renderMapa(); }).catch(()=>{});
+    J("cobertura.json").then(d=>{ COB=d; _covCache={}; _invCov=null; _distLineCache={}; _distSysCache=null; renderNseGap(); if(state.mapMode!=="recorridos") renderMapa(); }).catch(()=>{});
     J("flota_equidad.json").then(d=>{ EQ=d; renderEquidad(); }).catch(()=>{});
     J("operacion_linea.json").then(d=>{ OP=d; renderOperacion(); renderCalidad(); }).catch(()=>{});
     J("speed_grid_hora.json").then(d=>{ GRID=d; if(state.mapMode==="conges") renderMapa(); }).catch(()=>{});
