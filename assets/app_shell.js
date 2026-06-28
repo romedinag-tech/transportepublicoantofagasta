@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=82`).then(r=>r.json());
-const BUILD = "afta-v33";
+const J = n => fetch(`data/${n}?v=83`).then(r=>r.json());
+const BUILD = "afta-v34";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -15,7 +15,27 @@ let PDWELL={paraderos:[],reparto:{}};
 let CLINE={lineas:[],nse:{}};
 let SALT=null, salidasChart=null;
 let VD=null, vdChart=null, vdMarker=null;
-let BUNCH=null;
+let BUNCH=null, BUNCHA=null;
+// segmentos del shape principal de una línea-sentido, etiquetados con su bin de bunching
+let _shapeBinsCache={};
+function shapePrincipalLS(lb, s){
+  const segs=(GEOM&&GEOM[lb]||[]).filter(x=>+x.s===+s); if(!segs.length) return null;
+  let cand=segs.filter(x=>String(x.rec)===String(lb));
+  if(!cand.length) cand=segs.slice();
+  cand.sort((a,b)=>b.p.length-a.p.length);
+  return cand[0].p;
+}
+function shapeSegsBins(lb, s, bin_m){
+  const k=lb+"|"+s+"|"+bin_m; if(_shapeBinsCache[k]) return _shapeBinsCache[k];
+  const pts=shapePrincipalLS(lb,s); if(!pts) return [];
+  const out=[]; let acc=0;
+  for(let i=0;i<pts.length-1;i++){
+    const d=_haversineM(pts[i],pts[i+1]); const mid=acc+d/2;
+    out.push({a:pts[i],b:pts[i+1],bi:Math.floor(mid/bin_m)});
+    acc+=d;
+  }
+  return _shapeBinsCache[k]=out;
+}
 function _haversineM(a,b){ const R=6371000, la1=a[0]*Math.PI/180, la2=b[0]*Math.PI/180, dla=(b[0]-a[0])*Math.PI/180, dlo=(b[1]-a[1])*Math.PI/180;
   const h=Math.sin(dla/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dlo/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
 function lineaShapePrincipal(linea, s){
@@ -852,20 +872,40 @@ function drawTerminales(){
 }
 function drawBunching(){
   if(!coverLayer) return; coverLayer.clearLayers();
-  if(!BUNCH||!BUNCH.lineas||!GEOM){ setCoverLegend("bunch"); return; }
+  if(!GEOM){ setCoverLegend("bunch"); return; }
   const per = state.periodo, dia = "L", lbl = periodoLbl(per);
   const lineas = state.linea!=="TODAS" ? [state.linea] : Object.keys(GEOM);
-  lineas.forEach(lb=>{
-    const d = BUNCH.lineas[lb] && BUNCH.lineas[lb][dia] && BUNCH.lineas[lb][dia][per];
-    if(!d || d.cv==null) return;
-    const cv = d.cv, hw = d.headway, n = d.n;
-    const col = cvColor(cv);
-    (GEOM[lb]||[]).forEach(seg=>{
-      if(!seg.p||seg.p.length<2) return;
-      L.polyline(seg.p,{renderer:coverCanvas,color:col,weight:3.2,opacity:.92,lineCap:"round"})
-        .bindTooltip(`<b>Línea ${lb}</b> · ${lbl}<br>CV de headways: <b>${cv}</b><br>headway medio ${hw} min · ${n} intervalos<br>${cv>0.7?"buses apelotonados":cv>0.5?"regularidad media":"servicio regular"}`,{sticky:true}).addTo(coverLayer);
+  // PREFERIDO: bunching ESPACIAL por bin (drape por tramos del eje)
+  if(BUNCHA && BUNCHA.lineas){
+    const BIN = BUNCHA.bin_m || 400;
+    lineas.forEach(lb=>{
+      const data = BUNCHA.lineas[lb]; if(!data) return;
+      ["0","1"].forEach(s=>{
+        const bins = data[s] || []; if(!bins.length) return;
+        const segs = shapeSegsBins(lb, +s, BIN);
+        segs.forEach(({a,b,bi})=>{
+          const bin = bins[bi]; if(!bin) return;
+          const dp = bin.per && bin.per[per]; if(!dp || dp.cv==null) return;
+          const cv = dp.cv;
+          L.polyline([a,b], {renderer:coverCanvas, color:cvColor(cv), weight:3.6, opacity:.92, lineCap:"round"})
+            .bindTooltip(`<b>Línea ${lb}</b> · ${lbl} · ${s==="0"?"Ida":"Regreso"}<br>tramo ${bin.a}–${bin.b} m<br>CV de headways: <b>${cv}</b> · headway ${dp.headway??"—"} min · ${dp.n||0} intervalos<br>${cv>0.8?"buses muy apelotonados":cv>0.5?"regularidad media":"servicio regular"}`,
+              {sticky:true}).addTo(coverLayer);
+        });
+      });
     });
-  });
+    setCoverLegend("bunch"); return;
+  }
+  // FALLBACK: bunching agregado por línea (color uniforme)
+  if(BUNCH&&BUNCH.lineas){
+    lineas.forEach(lb=>{
+      const d = BUNCH.lineas[lb] && BUNCH.lineas[lb][dia] && BUNCH.lineas[lb][dia][per];
+      if(!d || d.cv==null) return;
+      (GEOM[lb]||[]).forEach(seg=>{ if(!seg.p||seg.p.length<2) return;
+        L.polyline(seg.p,{renderer:coverCanvas,color:cvColor(d.cv),weight:3,opacity:.9,lineCap:"round"})
+          .bindTooltip(`<b>Línea ${lb}</b> · ${lbl}<br>CV ${d.cv} · headway ${d.headway} min`,{sticky:true}).addTo(coverLayer);
+      });
+    });
+  }
   setCoverLegend("bunch");
 }
 function renderBunchTable(){
@@ -1860,6 +1900,7 @@ function renderEvolucion(){
     J("salidas_terminal.json").then(d=>{ SALT=d; renderSalidas(); }).catch(()=>{});
     J("perfil_vel_dist.json").then(d=>{ VD=d; renderVelDist(); }).catch(()=>{});
     J("bunching.json").then(d=>{ BUNCH=d; if(state.mapMode==="bunch") renderMapa(); }).catch(()=>{});
+    J("bunching_arco.json").then(d=>{ BUNCHA=d; if(state.mapMode==="bunch") renderMapa(); }).catch(()=>{});
     J("destinos_principales.json").then(d=>{ DEST=d; if(state.mapMode==="cover"||state.mapMode==="trans") renderMapa(); }).catch(()=>{});
     J("paraderos_espera.json").then(d=>{ PESP=d; if(state.mapMode==="wait") renderMapa(); }).catch(()=>{});
     J("empresa_stats.json").then(d=>{ EMPR=d; renderEmpresas(); }).catch(()=>{});
