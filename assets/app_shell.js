@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=95`).then(r=>r.json());
-const BUILD = "afta-v45";
+const J = n => fetch(`data/${n}?v=96`).then(r=>r.json());
+const BUILD = "afta-v45b";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -418,16 +418,17 @@ function renderSalidas(){
   const tipos = all ? ["L","S","D"] : [state.salDia];
   const series = tipos.map(t=>({name:DEF[t][0], type:"line", data:sl(S[t]||[]), smooth:false, symbol:"none",
     lineStyle:{width:1.9,color:DEF[t][1]}, areaStyle: all?undefined:{color:DEF[t][2]}}));
-  // --- serie programada (GTFS) superpuesta como línea punteada ---
+  // --- serie programada (GTFS): color blanco/gris claro para distinguir de la observada ---
   const PR = SALT.prog_linea && SALT.prog_linea[state.linea];
   const Praw = (state.linea!=="TODAS" && PR) ? PR : (SALT.prog||null);
   if(Praw){
-    const PDEF = {L:["Prog. laboral","#fb923c"], S:["Prog. sábado","#38bdf8"], D:["Prog. domingo","#a78bfa"]};
+    const PCOL = {L:"#e2e8f0", S:"#e2e8f0", D:"#e2e8f0"};
+    const PNAM = {L:"Programado", S:"Prog. sáb.", D:"Prog. dom."};
     tipos.forEach(t=>{
       const pdata = sl(Praw[t]||[]);
-      series.push({name:PDEF[t][0], type:"line", data:pdata, smooth:false, symbol:"none",
-        lineStyle:{width:1.6, color:PDEF[t][1], type:"dashed", opacity:.7},
-        areaStyle:undefined});
+      series.push({name: all?PNAM[t]:"Programado", type:"line", data:pdata, smooth:false, symbol:"none",
+        lineStyle:{width:2, color:PCOL[t], type:[6,4], opacity:.85},
+        areaStyle:undefined, z:0});
     });
   }
   const legendData = [...tipos.map(t=>DEF[t][0]), ...(Praw ? tipos.map(t=>(all?"Prog. "+DEF[t][0].toLowerCase():"Prog. "+DEF[tipos[0]][0].toLowerCase())) : [])];
