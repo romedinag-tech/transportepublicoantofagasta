@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=94`).then(r=>r.json());
-const BUILD = "afta-v44";
+const J = n => fetch(`data/${n}?v=95`).then(r=>r.json());
+const BUILD = "afta-v45";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -418,10 +418,24 @@ function renderSalidas(){
   const tipos = all ? ["L","S","D"] : [state.salDia];
   const series = tipos.map(t=>({name:DEF[t][0], type:"line", data:sl(S[t]||[]), smooth:false, symbol:"none",
     lineStyle:{width:1.9,color:DEF[t][1]}, areaStyle: all?undefined:{color:DEF[t][2]}}));
+  // --- serie programada (GTFS) superpuesta como línea punteada ---
+  const PR = SALT.prog_linea && SALT.prog_linea[state.linea];
+  const Praw = (state.linea!=="TODAS" && PR) ? PR : (SALT.prog||null);
+  if(Praw){
+    const PDEF = {L:["Prog. laboral","#fb923c"], S:["Prog. sábado","#38bdf8"], D:["Prog. domingo","#a78bfa"]};
+    tipos.forEach(t=>{
+      const pdata = sl(Praw[t]||[]);
+      series.push({name:PDEF[t][0], type:"line", data:pdata, smooth:false, symbol:"none",
+        lineStyle:{width:1.6, color:PDEF[t][1], type:"dashed", opacity:.7},
+        areaStyle:undefined});
+    });
+  }
+  const legendData = [...tipos.map(t=>DEF[t][0]), ...(Praw ? tipos.map(t=>(all?"Prog. "+DEF[t][0].toLowerCase():"Prog. "+DEF[tipos[0]][0].toLowerCase())) : [])];
+  const legendDataReal = series.map(s=>s.name);
   salidasChart.setOption({
     textStyle:{fontFamily:"Inter,sans-serif",color:th.tx},
-    grid:{left:36,right:14,top:all?22:16,bottom:24,containLabel:true},
-    legend: all?{data:tipos.map(t=>DEF[t][0]),textStyle:{color:th.mut,fontSize:10},top:0,right:0,itemWidth:14,itemHeight:8}:{show:false},
+    grid:{left:36,right:14,top:26,bottom:24,containLabel:true},
+    legend:{data:legendDataReal,textStyle:{color:th.mut,fontSize:10},top:0,right:0,itemWidth:14,itemHeight:8},
     tooltip:{trigger:"axis",backgroundColor:th.tip,borderColor:th.tipB,textStyle:{color:th.tx},
       formatter:p=>{let s=`${lab[p[0].dataIndex]}`; p.forEach(x=>s+=`<br>${x.marker}${x.seriesName}: <b>${x.value}</b>`); return s;}},
     xAxis:{type:"category",data:lab,boundaryGap:false,
@@ -435,12 +449,15 @@ function renderSalidas(){
   const nb=$("salidas-narr");
   if(nb){
     const tot=t=>Math.round((S[t]||[]).reduce((a,b)=>a+b,0));
+    const totp=t=>Praw?Math.round((Praw[t]||[]).reduce((a,b)=>a+b,0)):0;
     const d=SALT.dias||{};
     if(all){
-      nb.innerHTML=`Salidas de buses desde <b>todos los terminales</b> (5 min): comparación <b style="color:#fb923c">laboral</b> ~${tot("L")} · <b style="color:#38bdf8">sábado</b> ~${tot("S")} · <b style="color:#a78bfa">domingo</b> ~${tot("D")} salidas/día. El domingo cae el servicio; revela cuánto se reduce la oferta el fin de semana.`;
+      nb.innerHTML=`Salidas de buses desde <b>todos los terminales</b> (5 min): comparación <b style="color:#fb923c">laboral</b> ~${tot("L")} · <b style="color:#38bdf8">sábado</b> ~${tot("S")} · <b style="color:#a78bfa">domingo</b> ~${tot("D")} salidas/día. Línea punteada = programado GTFS. El domingo cae el servicio; revela cuánto se reduce la oferta el fin de semana.`;
     } else {
       const sal=sl(S[state.salDia]||[]); const mx=Math.max(...sal), mxi=sal.indexOf(mx);
-      nb.innerHTML=`Buses saliendo de <b>todos los terminales</b> en bins de ${SALT.bin_min} min · <b>${DEF[state.salDia][0]}</b> (promedio de ${d[state.salDia]||"—"} días). Pico ≈ <b>${mx}</b>/5min a las ${lab[mxi]} · ~<b>${tot(state.salDia)}</b> salidas al día. Muestra si la frecuencia de despacho se dosifica o se mantiene pareja.`;
+      const cumpl = totp(state.salDia)>0 ? Math.round(100*tot(state.salDia)/totp(state.salDia)) : null;
+      const cumplTxt = cumpl!==null ? ` · cumplimiento <b>${cumpl}%</b>` : "";
+      nb.innerHTML=`Buses saliendo en bins de ${SALT.bin_min} min · <b>${DEF[state.salDia][0]}</b> (promedio de ${d[state.salDia]||"—"} días). Observado ~<b>${tot(state.salDia)}</b> · programado ~<b>${totp(state.salDia)}</b>${cumplTxt}. Línea punteada = programado GTFS.`;
     }
   }
 }
