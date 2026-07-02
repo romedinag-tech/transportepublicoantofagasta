@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=93`).then(r=>r.json());
-const BUILD = "afta-v43";
+const J = n => fetch(`data/${n}?v=94`).then(r=>r.json());
+const BUILD = "afta-v44";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -57,11 +57,16 @@ function lineaPosAtKm(linea, s, km){
 }
 function setVdMarker(latlng, label){
   if(!lmap) return;
-  if(vdMarker){ try{ lmap.removeLayer(vdMarker); }catch(e){} vdMarker=null; }
-  if(!latlng) return;
-  vdMarker = L.circleMarker(latlng, {radius:9, color:"#0b1220", weight:2.5, fillColor:"#fbbf24", fillOpacity:.95, pane:"markerPane"});
-  if(label) vdMarker.bindTooltip(label, {permanent:true, direction:"top", offset:[0,-8], className:"vd-tip"});
-  vdMarker.addTo(lmap);
+  if(!latlng){ if(vdMarker){ try{ lmap.removeLayer(vdMarker); }catch(e){} vdMarker=null; } return; }
+  if(vdMarker){
+    vdMarker.setLatLng(latlng);
+    if(label) vdMarker.setTooltipContent(label);
+  } else {
+    vdMarker = L.circleMarker(latlng, {renderer:coverCanvas, radius:9, color:"#0b1220", weight:2.5, fillColor:"#fbbf24", fillOpacity:.95});
+    vdMarker.bindTooltip("", {permanent:true, direction:"top", offset:[0,-8], className:"vd-tip"});
+    if(label) vdMarker.setTooltipContent(label);
+    vdMarker.addTo(lmap);
+  }
 }
 let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"recorridos", vista:"normal", periodo:"agg", purpose:"all", sentido:"amb", congTipo:"real", detTipo:"cong", salDia:"L", salSm:0, vdDia:"L", vdPer:"agg", vdSen:"amb", vdSm:0, modalTr:"pub", cmpA:null, cmpB:null};
 let chart, csChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;

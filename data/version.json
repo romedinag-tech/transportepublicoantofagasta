@@ -1,1 +1,1 @@
-{"build":"afta-v43","ciudad":"Antofagasta","periodo":"2025-06","base":"corregida (map-matching)","actualizado":"2026-07-02 12:00","nota":"layout: perfil velocidad arriba, flota y velocidad 3er lugar columna derecha","generado":"2026-07-02"}
+{"build":"afta-v44","ciudad":"Antofagasta","periodo":"2025-06","base":"corregida (map-matching)","actualizado":"2026-07-02 15:00","nota":"fix: marcador vel-dist usa canvas renderer para rotar con el mapa","generado":"2026-07-02"}
