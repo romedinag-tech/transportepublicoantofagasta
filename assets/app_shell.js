@@ -108,7 +108,9 @@ function toggleTheme(){
 }
 
 const cellOf = () => (T.cells[`${state.comuna}|${state.linea}`] || {kpi:null, horas:[]});
-const empresaDe = ln => { const x=(T.lineas||[]).find(l=>l.linea===ln); return x?x.empresa:""; };
+const _lineaBase = rec => { const m=rec.match(/^(\d+)/); return m?m[1]:rec; };
+const empresaDe = ln => { const x=(T.lineas||[]).find(l=>l.linea===ln||l.linea===_lineaBase(ln)); return x?x.empresa:""; };
+const esVariante = ln => ln!=="TODAS" && (T.lineas||[]).some(l=>(l.variantes||[]).includes(ln));
 
 /* ---------- menús ---------- */
 const PERIODOS = [["agg","Agregado"],["am","Punta AM"],["md","Mediodía"],["pm","Punta PM"],["off","Fuera punta"],["noche","Noche"]];
@@ -238,20 +240,46 @@ function buildSaldia(){
     box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.p===state.salDia));
     renderSalidas(); });
 }
+const _expandedLines = new Set();
 function buildLineaList(filter=""){
   const f = filter.trim().toLowerCase();
   const setC = (state.comuna!=="TODAS" && CLIN[state.comuna]) ? new Set(CLIN[state.comuna]) : null;
   const items = (T.lineas||[])
     .filter(l => !setC || setC.has(l.linea))
-    .filter(l => !f || l.linea.includes(f) || (l.empresa||"").toLowerCase().includes(f));
+    .filter(l => !f || l.linea.includes(f) || (l.empresa||"").toLowerCase().includes(f)
+                 || (l.variantes||[]).some(v=>v.toLowerCase().includes(f)));
   const hint = $("linea-hint");
   if(hint) hint.textContent = setC ? `${items.length} líneas operan en ${state.comuna}` : `${items.length} líneas · sistema`;
-  $("linea-list").innerHTML = items.map(l =>
-    `<div class="litem" data-l="${l.linea}"><span class="ln">${l.linea}</span><span class="nm">${l.empresa||""}</span></div>`).join("");
+  let html = "";
+  for(const l of items){
+    const vars = l.variantes || [];
+    const hasVars = vars.length > 0;
+    const expanded = _expandedLines.has(l.linea);
+    const sel = state.linea === l.linea;
+    const arrow = hasVars ? `<span class="lexp" data-lb="${l.linea}" style="cursor:pointer;margin-right:4px;font-size:10px;opacity:.6">${expanded?"▼":"▶"}</span>` : "";
+    html += `<div class="litem${sel?" active":""}" data-l="${l.linea}">${arrow}<span class="ln">${l.linea}</span><span class="nm">${l.empresa||""}</span></div>`;
+    if(hasVars && expanded){
+      for(const v of vars){
+        const vsel = state.linea === v;
+        const vk = (T.cells||{})[`TODAS|${v}`];
+        const vkpi = vk && vk.kpi;
+        const vsub = vkpi ? `${fmt1(vkpi.vel)} km/h · ${fmt1(vkpi.pct_det)}%` : "";
+        html += `<div class="litem litem-var${vsel?" active":""}" data-l="${v}" style="padding-left:28px;font-size:12px"><span class="ln" style="font-size:12px">${v}</span><span class="nm" style="font-size:10px;opacity:.7">${vsub}</span></div>`;
+      }
+    }
+  }
+  $("linea-list").innerHTML = html;
+  $("linea-list").querySelectorAll(".lexp").forEach(el=>{
+    el.onclick = (e)=>{ e.stopPropagation(); const lb=el.dataset.lb;
+      if(_expandedLines.has(lb)) _expandedLines.delete(lb); else _expandedLines.add(lb);
+      buildLineaList($("linea-search")?$("linea-search").value:""); };
+  });
   $("linea-list").querySelectorAll(".litem").forEach(el=>{
-    el.onclick = ()=>{ state.linea = state.linea===el.dataset.l ? "TODAS" : el.dataset.l;
+    if(!el.dataset.l) return;
+    el.onclick = (e)=>{ if(e.target.classList.contains("lexp")) return;
+      state.linea = state.linea===el.dataset.l ? "TODAS" : el.dataset.l;
       state.vista = "normal";
-      if(state.linea!=="TODAS") state.comuna = "TODAS";   // elegir línea limpia la comuna
+      if(state.linea!=="TODAS") state.comuna = "TODAS";
       buildLineaList($("linea-search")?$("linea-search").value:""); render(); };
   });
 }
@@ -298,6 +326,7 @@ function render(){
   const emp = state.linea!=="TODAS" ? empresaDe(state.linea) : "";
   if(state.linea==="TODAS" && state.comuna==="TODAS"){ title="Antofagasta"; sub="13 líneas · junio 2025"; }
   else if(state.linea==="TODAS"){ title=state.comuna; sub="todas las líneas que operan aquí"; }
+  else if(state.comuna==="TODAS" && esVariante(state.linea)){ title=`Variante ${state.linea}`; sub=`Línea ${_lineaBase(state.linea)} · ${emp} · Antofagasta`; }
   else if(state.comuna==="TODAS"){ title=`Línea ${state.linea} · ${emp}`; sub="en todo Antofagasta"; }
   else { title=`Línea ${state.linea} · ${emp}`; sub=`en ${state.comuna}`; }
   $("scope-title").textContent = title;
@@ -351,13 +380,16 @@ function renderKPIs(cell){
   const busesSub = k.flota_pico!=null ? `${fmt(k.flota_pico)} en hora punta` : "buses en operación";
   const cards = [
     kpiCard("Buses que operan", fmt(buses), busesSub, "🚍", "neutral"),
-    kpiCard("Velocidad media", fmt1(k.vel)+" km/h", "efectiva, en ruta", "⚡", semHigh(k.vel,22,14)),
+    kpiCard("Velocidad comercial", fmt1(k.vel)+" km/h", "dist/tiempo · incl. paradas", "⚡", semHigh(k.vel,17,13)),
     kpiCard("Tiempo detenido", fmt1(k.pct_det)+" %", "en ruta · excl. terminales", "🛑", semLow(k.pct_det,18,28)),
   ];
   if(state.linea==="TODAS")
     cards.push(kpiCard("Líneas", k.n_lineas, "operando en Antofagasta", "🧭", "neutral"));
+  else if(esVariante(state.linea))
+    cards.push(kpiCard("Variante", state.linea, `de línea ${_lineaBase(state.linea)}`, "🧭", "neutral"));
   else {
-    const nv = GEOM&&GEOM[state.linea] ? new Set(GEOM[state.linea].map(s=>s.rec)).size : "—";
+    const gk = GEOM&&GEOM[state.linea];
+    const nv = gk ? new Set(gk.map(s=>s.rec)).size : "—";
     cards.push(kpiCard("Variantes", nv, "recorridos de la línea", "🧭", "neutral"));
   }
   cards.push(kpiCard("Tiempo de ciclo", fmtDur(k.tc), "ida + regreso · en marcha", "⏱️", "neutral"));
@@ -390,7 +422,7 @@ function renderHora(cell){
     const hb=h.map((x,i)=>[i,x?x.b:0]).filter(x=>x[1]>0);
     const pkF=hb.length?Math.max(...hb.map(x=>x[1])):0;
     const hv=h.map((x,i)=>[i,x?x.v:null,x?x.b:0]).filter(x=>x[1]!=null && x[2]>=pkF*0.25);   // solo horas con operación real
-    let t=`Cuántos <b>buses operan cada hora</b> (barras) y la <b>velocidad media</b> (línea), en días laborables. Muestra la punta de servicio y dónde se cae la velocidad por congestión.`;
+    let t=`Cuántos <b>buses operan cada hora</b> (barras) y la <b>velocidad comercial</b> (línea), en días laborables. Muestra la punta de servicio y dónde se cae la velocidad por congestión.`;
     if(hb.length&&hv.length){ const pk=hb.reduce((a,b)=>b[1]>a[1]?b:a), mn=hv.reduce((a,b)=>b[1]<a[1]?b:a);
       t+=` Punta: <b>${fmt1(pk[1])}</b> buses a las ${HORAS[pk[0]]}; velocidad mínima <b>${fmt1(mn[1])} km/h</b> a las ${HORAS[mn[0]]}.`; }
     el.innerHTML=t;
@@ -830,8 +862,10 @@ function drawCongestion(){
   const tl = congtipoLbl(state.congTipo).toLowerCase();
   const emit = (pts,v,d)=> L.polyline(pts,{renderer:coverCanvas,color:congSpeedColor(v),weight:3,opacity:.92,lineCap:"round",lineJoin:"round"})
       .bindTooltip(`velocidad ${tl}: <b>${Math.round(v)} km/h</b> · ${sentidoLbl(d)} (${lbl})`,{sticky:true}).addTo(coverLayer);
-  const lbs = state.linea!=="TODAS" ? (GEOM[state.linea]?[state.linea]:[]) : Object.keys(GEOM);
-  lbs.forEach(lb=>{ (GEOM[lb]||[]).forEach(seg=>{
+  const _cgKey = state.linea!=="TODAS" ? (GEOM[state.linea]?state.linea:_lineaBase(state.linea)) : null;
+  const _cgSegs = _cgKey ? (esVariante(state.linea)?GEOM[_cgKey].filter(s=>s.rec===state.linea):GEOM[_cgKey]) : null;
+  const lbs = _cgSegs ? [_cgKey] : (state.linea==="TODAS" ? Object.keys(GEOM) : []);
+  lbs.forEach(lb=>{ (_cgSegs||GEOM[lb]||[]).forEach(seg=>{
     const d=String(seg.s); const arr=spd[d]; if(!arr) return;
     const p=seg.p; if(!p||p.length<2) return;
     let run=null;                          // agrupa tramos contiguos de la misma celda (mismo color)
@@ -1341,10 +1375,12 @@ function renderMapa(){
     }
   });
   let bounds=[];
-  setSpeedLegend(state.linea!=="TODAS" && !!GEOM[state.linea]);
+  const _geomKey = state.linea!=="TODAS" ? (GEOM[state.linea] ? state.linea : _lineaBase(state.linea)) : null;
+  const _geomSegs = _geomKey && GEOM[_geomKey] ? (esVariante(state.linea) ? GEOM[_geomKey].filter(s=>s.rec===state.linea) : GEOM[_geomKey]) : null;
+  setSpeedLegend(!!_geomSegs);
   const isRec = state.mapMode==="recorridos";
-  if(state.linea!=="TODAS" && GEOM[state.linea]){
-    GEOM[state.linea].forEach(seg=>{
+  if(_geomSegs){
+    _geomSegs.forEach(seg=>{
       const p=seg.p;
       const col = colorLinea(state.linea);
       if(isRec){                              // Recorridos: trazado grueso de la línea
@@ -1360,14 +1396,15 @@ function renderMapa(){
     });
     setSpeedLegend(false);
     // paraderos oficiales de la línea (solo en Recorridos, para no saturar)
-    const ps = PAR[state.linea]||[];
+    const ps = PAR[esVariante(state.linea)?_lineaBase(state.linea):state.linea]||[];
     if(isRec) ps.forEach(s=>{
       L.circleMarker([s[0],s[1]],{radius:3.2,color:"#0b1220",weight:1,fillColor:"#e2e8f0",fillOpacity:0.95})
         .bindTooltip(s[2],{direction:"top"}).addTo(stopLayer);
     });
     if(isRec){
-      const nrec = new Set(GEOM[state.linea].map(s=>s.rec)).size;
-      $("map-title").textContent = `Línea ${state.linea} · ${nrec} variante${nrec>1?"s":""} · ${ps.length} paraderos`;
+      const nrec = new Set(_geomSegs.map(s=>s.rec)).size;
+      const lbl = esVariante(state.linea) ? `Variante ${state.linea}` : `Línea ${state.linea} · ${nrec} variante${nrec>1?"s":""}`;
+      $("map-title").textContent = `${lbl} · ${ps.length} paraderos`;
     }
   } else if(state.comuna!=="TODAS"){
     const f = feats.find(x=>x.properties.name===state.comuna);
@@ -1466,7 +1503,7 @@ function renderNarrative(){
       const dist = (d.share_terminal>=8)
         ? ` El <b>% de tiempo detenido que muestra la página ya está corregido</b> (en ruta): <b>${d.det_corr}%</b>. Sin excluir el dwell de terminal sería <b>${d.det_raw}%</b> — es decir, el <b style="color:#fbbf24">${d.share_terminal}%</b> de su "detenido" era estar parado en cabecera, no demora en marcha.`
         : ` Su dwell de terminal es bajo (${d.share_terminal??0}% del detenido): su tiempo detenido (${d.det_corr}%) es casi todo demora en ruta.`;
-      el.innerHTML = `<b>Terminales de la línea ${state.linea}</b>: ${nt} terminal${nt===1?"":"es"} de alto reposo (▣) y sus cabeceras de ruta (◇), detectados desde el GPS.${dist} La velocidad media no se afecta (ya excluye los buses parados); toda la página reporta el <b>% detenido en ruta</b>.`;
+      el.innerHTML = `<b>Terminales de la línea ${state.linea}</b>: ${nt} terminal${nt===1?"":"es"} de alto reposo (▣) y sus cabeceras de ruta (◇), detectados desde el GPS.${dist} La velocidad comercial incluye paradas; el <b>% detenido en ruta</b> excluye terminales y retornos.`;
     } else el.innerHTML="";
     return;
   }
@@ -1882,7 +1919,7 @@ function renderComparador(){
     const k=(T.cells||{})[`${comuna}|TODAS`]; const kpi=k&&k.kpi||{};
     return `<div style="border:1px solid var(--line);border-radius:12px;padding:14px">
       <div style="font-weight:600;color:${col[ci]};margin-bottom:8px">${comuna}</div>
-      ${[["Velocidad media",fmt1(kpi.vel)+" km/h"],["Tiempo detenido",fmt1(kpi.pct_det)+" %"],["Flota en punta",fmt(kpi.flota_pico)],["Líneas",kpi.n_lineas||"—"],["Registros",((kpi.pulsos||0)/1e6).toFixed(1)+" M"]]
+      ${[["Velocidad comercial",fmt1(kpi.vel)+" km/h"],["Tiempo detenido",fmt1(kpi.pct_det)+" %"],["Flota en punta",fmt(kpi.flota_pico)],["Líneas",kpi.n_lineas||"—"],["Registros",((kpi.pulsos||0)/1e6).toFixed(1)+" M"]]
         .map(r=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line);font-size:13px"><span class="hint">${r[0]}</span><b style="font-family:var(--mono)">${r[1]}</b></div>`).join("")}</div>`;
   };
   $("cmp-grid").innerHTML = card(state.cmpA,0)+card(state.cmpB,1);
