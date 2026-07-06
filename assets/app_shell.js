@@ -377,10 +377,12 @@ function fmtDur(min){ // minutos -> "3h 30m" / "45 min"
 function renderKPIs(cell){
   const k = cell.kpi;
   if(!k){ $("kpis2").innerHTML = `<div class="empty">Sin datos para este ámbito.</div>`; return; }
-  const buses = k.flota_total!=null ? k.flota_total : k.flota_pico;
-  const busesSub = k.flota_pico!=null ? `${fmt(k.flota_pico)} en hora punta` : "buses en operación";
+  const hasFT = k.flota_total!=null;
+  const busLbl = hasFT ? "Buses que operan" : "Flota en hora punta";
+  const busVal = hasFT ? fmt(k.flota_total) : fmt(k.flota_pico);
+  const busSub = hasFT ? `${fmt(k.flota_pico)} en hora punta` : "promedio de buses simultáneos";
   const cards = [
-    kpiCard("Buses que operan", fmt(buses), busesSub, "🚍", "neutral"),
+    kpiCard(busLbl, busVal, busSub, "🚍", "neutral"),
     kpiCard("Velocidad comercial", fmt1(k.vel)+" km/h", "dist/tiempo · incl. paradas", "⚡", semHigh(k.vel,17,13)),
     kpiCard("Tiempo detenido", fmt1(k.pct_det)+" %", "en ruta · excl. terminales", "🛑", semLow(k.pct_det,18,28)),
   ];
@@ -389,12 +391,15 @@ function renderKPIs(cell){
   else if(esVariante(state.linea))
     cards.push(kpiCard("Variante", state.linea, `de línea ${_lineaBase(state.linea)}`, "🧭", "neutral"));
   else {
-    const gk = GEOM&&GEOM[state.linea];
-    const nv = gk ? new Set(gk.map(s=>s.rec)).size : "—";
-    cards.push(kpiCard("Variantes", nv, "recorridos de la línea", "🧭", "neutral"));
+    const tl = T&&T.lineas&&T.lineas.find(l=>l.linea===state.linea);
+    const nv = tl&&tl.variantes ? tl.variantes.length : 0;
+    cards.push(kpiCard("Variantes", nv||"—", nv ? "recorridos de la línea" : "sin variantes registradas", "🧭", "neutral"));
   }
-  cards.push(kpiCard("Tiempo de ciclo", fmtDur(k.tc), "ida + regreso · en marcha", "⏱️", "neutral"));
-  cards.push(kpiCard("Distancia de ciclo", (k.dc!=null?fmt1(k.dc):"—")+" km", "ida + regreso", "📏", "neutral"));
+  const _bk = state.linea!=="TODAS" ? ((T.cells||{})["TODAS|"+_lineaBase(state.linea)]||{}).kpi||{} : {};
+  const tcVal = k.tc!=null ? k.tc : _bk.tc;
+  const dcVal = k.dc!=null ? k.dc : _bk.dc;
+  cards.push(kpiCard("Tiempo de ciclo", fmtDur(tcVal), "ida + regreso · en marcha", "⏱️", "neutral"));
+  cards.push(kpiCard("Distancia de ciclo", (dcVal!=null?fmt1(dcVal):"—")+" km", "ida + regreso", "📏", "neutral"));
   $("kpis2").innerHTML = cards.join("");
 }
 
@@ -1414,8 +1419,9 @@ function renderMapa(){
         .bindTooltip(s[2],{direction:"top"}).addTo(stopLayer);
     });
     if(isRec){
-      const nrec = new Set(_geomSegs.map(s=>s.rec)).size;
-      const lbl = esVariante(state.linea) ? `Variante ${state.linea}` : `Línea ${state.linea} · ${nrec} variante${nrec>1?"s":""}`;
+      const tl2 = T&&T.lineas&&T.lineas.find(l=>l.linea===state.linea);
+      const nvar = tl2&&tl2.variantes ? tl2.variantes.length : 0;
+      const lbl = esVariante(state.linea) ? `Variante ${state.linea}` : (nvar ? `Línea ${state.linea} · ${nvar} variante${nvar>1?"s":""}` : `Línea ${state.linea}`);
       $("map-title").textContent = `${lbl} · ${ps.length} paraderos`;
     }
   } else if(state.comuna!=="TODAS"){
