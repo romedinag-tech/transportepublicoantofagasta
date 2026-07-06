@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=97`).then(r=>r.json());
-const BUILD = "afta-v46";
+const J = n => fetch(`data/${n}?v=98`).then(r=>r.json());
+const BUILD = "afta-v47";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -111,6 +111,7 @@ const cellOf = () => (T.cells[`${state.comuna}|${state.linea}`] || {kpi:null, ho
 const _lineaBase = rec => { const m=rec.match(/^(\d+)/); return m?m[1]:rec; };
 const empresaDe = ln => { const x=(T.lineas||[]).find(l=>l.linea===ln||l.linea===_lineaBase(ln)); return x?x.empresa:""; };
 const esVariante = ln => ln!=="TODAS" && (T.lineas||[]).some(l=>(l.variantes||[]).includes(ln));
+const _lk = (obj, key) => (obj&&obj[key]) || (obj&&obj[_lineaBase(key)]); // variant→base fallback
 
 /* ---------- menús ---------- */
 const PERIODOS = [["agg","Agregado"],["am","Punta AM"],["md","Mediodía"],["pm","Punta PM"],["off","Fuera punta"],["noche","Noche"]];
@@ -439,7 +440,7 @@ function renderSalidas(){
   const bins=SALT.bins.slice(i0,i1+1);
   const lab=bins.map(m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"));
   // Si hay línea elegida y existen series por línea, usar esa; si no, sistema completo.
-  const PL = SALT.por_linea && SALT.por_linea[state.linea];
+  const PL = SALT.por_linea && _lk(SALT.por_linea, state.linea);
   const Sraw = (state.linea!=="TODAS" && PL) ? PL : SALT.salidas;
   const S = Sraw.L ? Sraw : {L:Sraw};   // compat estructura vieja (array plano)
   const smArr = (arr,w)=>{ if(!w||w<2) return arr; const half=Math.floor(w/2);
@@ -451,7 +452,7 @@ function renderSalidas(){
   const series = tipos.map(t=>({name:DEF[t][0], type:"line", data:sl(S[t]||[]), smooth:false, symbol:"none",
     lineStyle:{width:1.9,color:DEF[t][1]}, areaStyle: all?undefined:{color:DEF[t][2]}}));
   // --- serie programada (GTFS): color blanco/gris claro para distinguir de la observada ---
-  const PR = SALT.prog_linea && SALT.prog_linea[state.linea];
+  const PR = SALT.prog_linea && _lk(SALT.prog_linea, state.linea);
   const Praw = (state.linea!=="TODAS" && PR) ? PR : (SALT.prog||null);
   if(Praw){
     const PCOL = {L:"#e2e8f0", S:"#e2e8f0", D:"#e2e8f0"};
@@ -497,12 +498,13 @@ function renderSalidas(){
 
 function renderVelDist(){
   const card=$("vd-card"); if(!card) return;
-  const show = state.linea!=="TODAS" && state.vista==="normal" && VD && VD.lineas && VD.lineas[state.linea];
+  const _vdData = VD && VD.lineas && _lk(VD.lineas, state.linea);
+  const show = state.linea!=="TODAS" && state.vista==="normal" && _vdData;
   card.style.display = show ? "" : "none";
   if(!show) return;
   const elc=$("ch-veldist"); if(!elc) return;
   if(!vdChart) vdChart=echarts.init(elc);
-  const data = VD.lineas[state.linea];
+  const data = _vdData;
   const per = state.vdPer, dia = state.vdDia, sen = state.vdSen, sm = +state.vdSm||0;
   const ser = (data.serie&&data.serie[dia]&&data.serie[dia][per])||{};
   // media móvil centrada (ignora nulls); preserva el array original con nulls donde corresponda.
@@ -745,7 +747,7 @@ function coveredManzanas(linea, R=300, sentido=null){      // sentido=null|"amb"
 }
 // --- Cobertura DINÁMICA: cápsula 2 min por bus -> fracción de tiempo cubierta ---
 function frecLineaPerDia(linea, per, dia){
-  const d = CUMP&&CUMP.lineas&&CUMP.lineas[linea]; if(!d||!d.obs||!d.obs[dia]||!CUMP.horas) return 0;
+  const d = CUMP&&CUMP.lineas&&_lk(CUMP.lineas, linea); if(!d||!d.obs||!d.obs[dia]||!CUMP.horas) return 0;
   const arr=d.obs[dia], HC=CUMP.horas, hrs=PERIODO_H[per]||HC; let s=0,k=0;
   hrs.forEach(h=>{ const i=HC.indexOf(h); if(i>=0&&arr[i]>0){ s+=arr[i]; k++; } });
   return k? s/k : 0;
@@ -797,7 +799,11 @@ const distToOpacity = d => 0.22 + 0.66*Math.max(0, 1 - (d||0)/300);  // 0m: 0.88
 let _segCache={};
 function _lineSegs(linea){
   if(_segCache[linea]) return _segCache[linea];
-  const segs=[]; (GEOM[linea]||[]).forEach(s=>{ const p=s.p; for(let i=0;i<p.length-1;i++){ const a=toM(p[i][0],p[i][1]),b=toM(p[i+1][0],p[i+1][1]); segs.push([a[0],a[1],b[0],b[1]]); } });
+  const gk = GEOM[linea] ? linea : _lineaBase(linea);
+  const raw = GEOM[gk]||[];
+  const filtered = esVariante(linea) ? raw.filter(s=>s.rec===linea) : raw;
+  const src = filtered.length ? filtered : raw;
+  const segs=[]; src.forEach(s=>{ const p=s.p; for(let i=0;i<p.length-1;i++){ const a=toM(p[i][0],p[i][1]),b=toM(p[i+1][0],p[i+1][1]); segs.push([a[0],a[1],b[0],b[1]]); } });
   return _segCache[linea]=segs;
 }
 function nearLine(la,lo,linea,R=300){
@@ -890,8 +896,8 @@ function drawDetenciones(){
   const onL = state.linea!=="TODAS";
   let cong = (DET2||[]).filter(d=>inComuna(d.la,d.lo));
   let terms = ((TERM&&TERM.terminales)||[]).filter(t=>inComuna(t.la,t.lo));
-  if(onL){ cong = cong.filter(d=>nearLine(d.la,d.lo,state.linea));
-    terms = terms.filter(t=>(t.lineas||[]).some(l=>String(l.linea)===String(state.linea))); }
+  if(onL){ const _lb=_lineaBase(state.linea); cong = cong.filter(d=>nearLine(d.la,d.lo,state.linea));
+    terms = terms.filter(t=>(t.lineas||[]).some(l=>String(l.linea)===String(state.linea)||String(l.linea)===_lb)); }
   if(cong.length){
     const mx=Math.max(...cong.map(d=>d.det));
     cong.forEach(d=>{
@@ -912,7 +918,7 @@ function drawDetenciones(){
 }
 function drawParaderosDwell(){
   let par = ((PDWELL&&PDWELL.paraderos)||[]).filter(p=>inComuna(p.la,p.lo));
-  if(state.linea!=="TODAS") par = par.filter(p=>nearLine(p.la,p.lo,state.linea));
+  if(state.linea!=="TODAS") par = par.filter(p=>nearLine(p.la,p.lo,state.linea)||nearLine(p.la,p.lo,_lineaBase(state.linea)));
   if(!par.length){ setCoverLegend("detpar"); return; }
   const mx = Math.max(60, ...par.map(p=>p.seg_bus_dia||0));
   par.forEach(p=>{
@@ -926,7 +932,7 @@ function drawTerminales(){
   // Red de terminales y cabeceras (ubicación + flota por línea). Capa propia, sin congestión.
   if(!coverLayer) return; coverLayer.clearLayers();
   let terms = ((TERM&&TERM.terminales)||[]).filter(t=>inComuna(t.la,t.lo));
-  if(state.linea!=="TODAS") terms = terms.filter(t=>(t.lineas||[]).some(l=>String(l.linea)===String(state.linea)));
+  if(state.linea!=="TODAS"){ const _lb=_lineaBase(state.linea); terms = terms.filter(t=>(t.lineas||[]).some(l=>String(l.linea)===String(state.linea)||String(l.linea)===_lb)); }
   if(!terms.length){ setCoverLegend("term"); return; }
   const mxB = Math.max(...terms.map(t=>t.buses||1));
   terms.forEach(t=>{
@@ -947,7 +953,8 @@ function drawBunching(){
   if(!coverLayer) return; coverLayer.clearLayers();
   if(!GEOM){ setCoverLegend("bunch"); return; }
   const per = state.periodo, dia = "L", lbl = periodoLbl(per);
-  const lineas = state.linea!=="TODAS" ? [state.linea] : Object.keys(GEOM);
+  const _bunchKey = state.linea!=="TODAS" ? _lineaBase(state.linea) : null;
+  const lineas = _bunchKey ? [_bunchKey] : Object.keys(GEOM);
   // PREFERIDO: bunching ESPACIAL por bin (drape por tramos del eje)
   if(BUNCHA && BUNCHA.lineas){
     const BIN = BUNCHA.bin_m || 400;
@@ -1489,7 +1496,7 @@ function renderNarrative(){
     // y caer al texto de Terminales solo en modo recorridos/det.
     const M=state.mapMode, per=state.periodo;
     if(M==="bunch" && BUNCH){
-      const d = BUNCH.lineas&&BUNCH.lineas[state.linea]&&BUNCH.lineas[state.linea].L&&BUNCH.lineas[state.linea].L[per];
+      const _bl=_lk(BUNCH.lineas||{}, state.linea); const d = _bl&&_bl.L&&_bl.L[per];
       const sisCv = BUNCH.sistema&&BUNCH.sistema.L&&BUNCH.sistema.L[per]&&BUNCH.sistema.L[per].cv;
       el.innerHTML = `<b>Bunching · Línea ${state.linea}</b> en <b>${periodoLbl(per)}</b>: CV de headways = <b>${d&&d.cv!=null?d.cv:"—"}</b> (sistema ${sisCv??"—"}). El <b>CV</b> mide qué tan irregulares son los intervalos entre buses (σ/μ).
         <br><span style="display:inline-flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px"><b style="color:#34d399">≤0.3</b> óptimo · <b style="color:#a3e635">0.3–0.5</b> regular · <b style="color:#fbbf24">0.5–0.8</b> medio · <b style="color:#fb7185">≥0.8</b> apelotonado.</span>
@@ -1497,7 +1504,7 @@ function renderNarrative(){
       return;
     }
     // Default vista de línea: relato sobre terminales (válido para modo recorridos/det/term)
-    const tl=TLIN[state.linea];
+    const tl=_lk(TLIN, state.linea);
     if(tl && tl.puntos){
       const nt=tl.puntos.filter(p=>p.tipo==="terminal").length, d=tl.dist||{};
       const dist = (d.share_terminal>=8)
@@ -1586,7 +1593,7 @@ function renderCump(){
   const box = $("cump-box");
   const L = (CUMP.lineas)||{};
   if(state.linea!=="TODAS"){
-    const d = L[state.linea];
+    const d = _lk(L, state.linea);
     if(!d){ box.innerHTML=`<div class="empty">Sin frecuencia programada (GTFS) para esta línea.</div>`; return; }
     const html_dia = ["L","S","D"].map(s=>{
       const c=d.cumpl[s];
@@ -1636,9 +1643,10 @@ function renderCump(){
 
 function renderCumpSem(){
   const card = $("cump-sem-card");
-  if(state.linea==="TODAS" || !CSEM.lineas[state.linea]){ card.style.display="none"; return; }
+  const _csData = _lk(CSEM.lineas, state.linea);
+  if(state.linea==="TODAS" || !_csData){ card.style.display="none"; return; }
   card.style.display="";
-  const L = CSEM.lineas[state.linea];
+  const L = _csData;
   // toggles
   $("cs-dia").innerHTML = CS_DIAS.map(([k,l])=>`<b data-d="${k}" class="${state.csDia===k?"on":""}">${l}</b>`).join("");
   $("cs-var").innerHTML = CS_VARS.map(v=>`<b data-v="${v.k}" class="${state.csVar===v.k?"on":""}">${v.lbl}</b>`).join("");
@@ -1681,7 +1689,7 @@ function renderCumpSem(){
 /* ---------- KPI línea: equidad de uso de flota (Lorenz + Gini) ---------- */
 function renderEquidad(){
   const card=$("eq-flota-card");
-  const d = (EQ.lineas||{})[state.linea];
+  const d = _lk(EQ.lineas||{}, state.linea);
   if(state.linea==="TODAS" || !d){ card.style.display="none"; return; }
   card.style.display="";
   const g=d.gini, col = g>=0.4?"#fb7185":g>=0.25?"#fbbf24":"#34d399";
@@ -1761,7 +1769,7 @@ function renderNseGap(){
 
 /* ---------- KPI línea: operación (ciclo/headway/bunching/regularidad) ---------- */
 function renderOperacion(){
-  const card=$("op-card"); const o=(OP.lineas||{})[state.linea];
+  const card=$("op-card"); const o=_lk(OP.lineas||{}, state.linea);
   if(state.linea==="TODAS" || !o){ card.style.display="none"; return; }
   card.style.display="";
   const q=calcCalidad(state.linea);
@@ -1781,7 +1789,8 @@ let varProfChart=null, varTrendChart=null;
 function renderVarFreq(){
   const card=$("var-freq-card"); if(!card) return;
   if(state.linea==="TODAS" || state.vista!=="normal" || !VFREQ){ card.style.display="none"; return; }
-  const recs = Object.keys(VFREQ.variantes).filter(r=>VFREQ.variantes[r].linea===state.linea).sort();
+  const _vfBase = _lineaBase(state.linea);
+  const recs = Object.keys(VFREQ.variantes).filter(r=>VFREQ.variantes[r].linea===state.linea||VFREQ.variantes[r].linea===_vfBase).sort();
   if(!recs.length){ card.style.display="none"; return; }
   card.style.display="";
   if(!recs.includes(curVar)) curVar = recs[0];
@@ -1828,7 +1837,7 @@ function drawVarCharts(){
 /* ---------- KPI: índice sintético de calidad por línea ---------- */
 const calCol = s => s>=70?"#34d399":s>=50?"#fbbf24":"#fb7185";
 function calcCalidad(l){
-  const c=(CUMP.lineas||{})[l], o=(OP.lineas||{})[l], tc=(T.cells||{})[`TODAS|${l}`];
+  const c=_lk(CUMP.lineas||{},l), o=_lk(OP.lineas||{},l), tc=(T.cells||{})[`TODAS|${l}`];
   const freq = c&&c.cumpl&&c.cumpl.L!=null ? Math.min(c.cumpl.L,100) : null;
   const reg  = o&&o.reg!=null ? o.reg : null;
   const vel  = tc&&tc.kpi&&tc.kpi.vel!=null ? Math.min(tc.kpi.vel/24*100,100) : null;
