@@ -103,7 +103,7 @@
     <h1>Situación del Transporte Público de Antofagasta</h1>
     <div class="sub">Diagnóstico de recorridos, cobertura, frecuencia, velocidad y demanda</div>
     <div class="sub" style="color:#9ec1e0;font-size:16px">13 líneas base · 30 recorridos · 711 buses · ~11,8 millones de pulsos GPS</div>
-    <div class="meta">Rodrigo Medina G. · romedinag@gmail.com · Datos GPS junio 2025 · Censo 2024 (INE)</div>
+    <div class="meta">Datos GPS junio 2025 · Censo 2024 (INE)</div>
   </div>
   <svg class="coast" viewBox="0 0 1200 70" preserveAspectRatio="none"><path d="M0,40 C120,10 220,55 340,38 C470,20 560,58 700,42 C840,26 950,56 1070,40 C1130,32 1170,44 1200,38 L1200,70 L0,70 Z" fill="#ffffff"/></svg>
 </header>
@@ -113,8 +113,7 @@
   <a href="#rutas">Rutas y cobertura</a>
   <a href="#perfil">Perfil de líneas</a>
   <a href="#frecuencia">Frecuencia</a>
-  <a href="#velocidad">Velocidad y demoras</a>
-  <a href="#regularidad">Regularidad</a>
+  <a href="#velocidad">Velocidad</a>
   <a href="#demanda">Demanda</a>
   <a href="#conclusiones">Conclusiones</a>
   <a class="home" href="index.html">← Tablero interactivo</a>
@@ -186,27 +185,22 @@
   <div class="note" id="freq-note"></div>
 </div></section>
 
-<!-- VELOCIDAD Y DEMORAS -->
+<!-- VELOCIDAD -->
 <section class="sec" id="velocidad"><div class="wrap">
-  <div class="eyebrow">Velocidad y demoras</div>
-  <h2>Velocidad comercial y tiempo detenido</h2>
-  <p class="lead">La velocidad comercial (distancia sobre tiempo, incluyendo paradas) y el porcentaje del tiempo en que
-  el bus está detenido en ruta —excluyendo terminales— revelan dónde el servicio pierde eficiencia.</p>
+  <div class="eyebrow">Velocidad de operación</div>
+  <h2>Velocidad comercial y tiempo de ciclo</h2>
+  <p class="lead">Toda la velocidad de este informe es <b>velocidad comercial</b> (distancia sobre tiempo, <b>incluyendo las
+  paradas</b>). El sistema promedia 15,5 km/h, un valor que pareciera un tanto bajo frente a otras ciudades de Chile.
+  Además, no es homogénea en el territorio: la congestión se concentra en los ejes de mayor demanda del norte y el centro.</p>
   <div class="grid2">
-    <div class="card"><h4>Velocidad y % detenido por hora</h4><div class="cap">sistema, día laboral</div><div id="ch-velh" class="chart"></div></div>
-    <div class="card"><h4>Tiempo detenido por línea</h4><div class="cap">% del tiempo en ruta (excl. terminales), promedio AM/MD/PM</div><div id="ch-det" class="chart"></div></div>
+    <div class="card"><h4>Velocidad comercial por hora</h4><div class="cap">sistema, día laboral (incluye paradas)</div><div id="ch-velh" class="chart"></div></div>
+    <div class="card"><h4>Velocidad comercial por zona (norte → sur)</h4><div class="cap">franjas de latitud · km/h con paradas incluidas</div><div id="ch-zona" class="chart"></div></div>
   </div>
+  <div class="note">La velocidad comercial es más baja en los ejes de alta demanda del <b>sector norte</b> (en torno a La Chimba,
+  ~13-14 km/h) y en el <b>casco central</b> (~12-13 km/h), mientras que el <b>sur costero</b> circula claramente mejor (~19 km/h).
+  Es decir, la congestión afecta justamente donde se concentra la demanda del transporte público.</div>
   <h3>Tiempo y distancia de ciclo</h3>
   <div class="card"><h4>Ciclo por línea</h4><div class="cap">ida + regreso · tiempo (min, medido por GPS) y distancia (km)</div><div id="ch-ciclo" class="chart tall"></div></div>
-</div></section>
-
-<!-- REGULARIDAD -->
-<section class="sec" id="regularidad"><div class="wrap">
-  <div class="eyebrow">Regularidad del servicio</div>
-  <h2>¿Llegan parejos o apelotonados?</h2>
-  <p class="lead">La regularidad se mide con el <b>coeficiente de variación (CV) de los intervalos</b> entre buses
-  (headways). CV bajo = buses parejos; CV alto = apelotonamiento (dos buses juntos y luego un vacío largo).</p>
-  <div class="card"><h4>Regularidad por línea (CV de headways)</h4><div class="cap">día laboral · umbral BRT 0,4 · apelotonado ≥ 0,8</div><div id="ch-cv" class="chart tall"></div></div>
 </div></section>
 
 <!-- DEMANDA -->
@@ -224,8 +218,8 @@
         <div class="kpi"><div class="v">8%</div><div class="l">Caminata</div></div>
         <div class="kpi"><div class="v">2%</div><div class="l">Bici + moto</div></div>
       </div>
-      <div class="note">La dependencia del bus refuerza la importancia de sostener frecuencia y regularidad: cada
-      deterioro del servicio impacta directamente a la mayoría de quienes se desplazan al trabajo.</div>
+      <div class="note">La dependencia del bus refuerza la importancia de sostener la frecuencia y la velocidad del
+      servicio: cada deterioro impacta directamente a la mayoría de quienes se desplazan al trabajo.</div>
     </div>
   </div>
 </div></section>
@@ -233,32 +227,25 @@
 <!-- CONCLUSIONES -->
 <section class="sec" id="conclusiones"><div class="wrap">
   <div class="eyebrow">Conclusiones</div>
-  <h2>Fortalezas, brechas y recomendaciones</h2>
-  <div class="cols3">
+  <h2>Fortalezas y brechas</h2>
+  <div class="cols3" style="grid-template-columns:1fr 1fr">
     <div class="callout good"><h4>✓ Fortalezas</h4><ul>
-      <li>Cobertura territorial amplia: ~1.850 hogares/km promedio, con buena penetración en todos los NSE.</li>
-      <li>Frecuencia sostenida durante el día, sin caídas bruscas entre puntas.</li>
-      <li>Velocidad comercial razonable (~15,5 km/h) para una ciudad lineal con congestión moderada.</li>
+      <li>Cobertura territorial amplia: ~1.850 hogares/km promedio, con buena penetración en todos los niveles socioeconómicos.</li>
+      <li>Frecuencia sostenida a lo largo del día, sin caídas bruscas de servicio entre puntas.</li>
       <li>Cumplimiento del sistema alto (≈94% en día laboral) frente al plan.</li>
     </ul></div>
     <div class="callout warn"><h4>⚠ Áreas de mejora</h4><ul>
-      <li>Regularidad: varias líneas con CV ≥ 0,8 (apelotonamiento), especialmente 129, 107, 108 y 111.</li>
-      <li>Cumplimiento: 112 (~79%) y 104 (~80%) por debajo del estándar.</li>
-      <li>Demoras localizadas: puntos críticos de detención concentran tiempo perdido por bus/día.</li>
-      <li>Equidad: desbalance entre frecuencia ofertada y perfil socioeconómico en algunos ejes.</li>
-    </ul></div>
-    <div class="callout rec"><h4>→ Recomendaciones</h4><ul>
-      <li>Gestión de flota en tiempo real para atacar el apelotonamiento (control de headways).</li>
-      <li>Reforzar la programación de 112 y 104 hasta cerrar la brecha de cumplimiento.</li>
-      <li>Intervenir los puntos de demora recurrentes (prioridad de bus, paraderos).</li>
-      <li>Revisar variantes de baja cobertura y su aporte real a la equidad territorial.</li>
+      <li>Velocidad comercial baja (~15,5 km/h) y concentrada donde está la demanda: los ejes del norte (La Chimba) y el centro son los más lentos; el sur costero fluye mejor.</li>
+      <li>Frecuencia plana: puede dejar entrever carencias en las horas peak o sobreoferta en valle; conviene modularla mejor.</li>
+      <li>Cumplimiento: 112 (~79%) y 104 (~80%) por debajo de su programación en día laboral.</li>
+      <li>Equidad: la oferta es casi uniforme pese a la fuerte segmentación de demanda norte–sur.</li>
     </ul></div>
   </div>
 </div></section>
 
 <div class="foot">
   Informe generado a partir del tablero analítico de Antofagasta · Datos GPS junio 2025 · Censo 2024 (INE) ·
-  Rodrigo Medina G. · <a href="index.html">Volver al tablero interactivo</a>
+  <a href="index.html">Volver al tablero interactivo</a>
 </div>
 
 <script>
@@ -309,7 +296,7 @@ Promise.all([J("territorio.json"), J("cobertura_lineas.json"), J("cumplimiento.j
     {v:"94%", l:"Cumplimiento", s:"observado ÷ programado · laboral"},
     {v:Math.round(kpi.tc/60*10)/10+" h", l:"Tiempo de ciclo", s:kpi.tc+" min · "+kpi.dc.toFixed(0)+" km (ida+regreso)"},
     {v:"13 + 17", l:"Líneas + variantes", s:"30 recorridos · 12 U. de Negocio"},
-    {v:kpi.pct_det.toFixed(1)+"%", l:"Tiempo detenido", s:"en ruta, excl. terminales"},
+    {v:"13,7 km/h", l:"Velocidad · norte", s:"ejes de demanda (La Chimba) · vs 19,1 al sur"},
     {v:"~1.850", l:"Hogares por km", s:"cobertura promedio · buffer 300 m"},
     {v:"45%", l:"Demanda en bus", s:"partición modal · Censo 2024", acc:true},
   ];
@@ -390,25 +377,28 @@ Promise.all([J("territorio.json"), J("cobertura_lineas.json"), J("cumplimiento.j
     <b>112</b> y <b>104</b> (~79–80%); por exceso, <b>119</b> y <b>129</b> superan el 100%. La curva horaria muestra
     una oferta pareja, sin el colapso de servicio entre puntas que se observa en otras ciudades.`;
 
-  // ── velocidad y % detenido por hora ──
+  // ── velocidad comercial por hora (solo velocidad, incluye paradas) ──
   (function(){ const c=mk("ch-velh"); const H=T.cells["TODAS|TODAS"].horas;
-    const hrs=[],vel=[],det=[]; H.forEach((x,h)=>{ if(x&&x.v>0&&h>=6&&h<=23){hrs.push(h+"h");vel.push(x.v);det.push(x.d);} });
-    c.setOption({grid:{...BASE_GRID,top:34,right:44},legend:{top:0,textStyle:{color:COL.mut,fontSize:11},itemWidth:14,itemHeight:8},
-      tooltip:{trigger:"axis",...TT},
+    const hrs=[],vel=[]; H.forEach((x,h)=>{ if(x&&x.v>0&&h>=6&&h<=23){hrs.push(h+"h");vel.push(x.v);} });
+    c.setOption({grid:{...BASE_GRID,top:24},tooltip:{trigger:"axis",...TT,valueFormatter:v=>v+" km/h"},
       xAxis:{type:"category",data:hrs,boundaryGap:false,...AXIS_X},
-      yAxis:[{type:"value",name:"km/h",min:10,max:26,...AXIS_Y,nameTextStyle:{color:COL.mut,fontSize:10}},
-             {type:"value",name:"% det",min:0,max:40,...AXIS_Y,splitLine:{show:false},nameTextStyle:{color:COL.mut,fontSize:10}}],
+      yAxis:{type:"value",name:"km/h",min:10,max:20,...AXIS_Y,nameTextStyle:{color:COL.mut,fontSize:10}},
       series:[
-        {name:"Velocidad",type:"line",data:vel,smooth:true,symbol:"circle",symbolSize:5,lineStyle:{color:COL.mar,width:2.6},itemStyle:{color:COL.mar}},
-        {name:"% detenido",type:"line",yAxisIndex:1,data:det,smooth:true,symbol:"none",areaStyle:{color:"rgba(192,86,63,.10)"},lineStyle:{color:COL.bad,width:1.6,type:"dashed"}}
+        {name:"Velocidad comercial",type:"line",data:vel,smooth:true,symbol:"circle",symbolSize:5,areaStyle:{color:"rgba(31,78,121,.10)"},lineStyle:{color:COL.mar,width:2.6},itemStyle:{color:COL.mar}}
       ]});
   })();
 
-  // ── % detenido por línea ──
-  (function(){ const c=mk("ch-det");
-    const pd=l=>{ const a=(DP.lineas[l]||{}).amb||{}; const v=["am","md","pm"].map(p=>a[p]).filter(x=>x!=null); return v.length?v.reduce((s,b)=>s+b,0)/v.length:0; };
-    const arr=[...LINEAS].sort((a,b)=>pd(b)-pd(a)); const vals=arr.map(pd);
-    barChart("ch-det", arr, vals, {unit:"%", color:COL.bad, fmt:v=>v.toFixed(1)+"%"});
+  // ── velocidad comercial por zona (norte → sur), datos del análisis latitudinal ──
+  (function(){
+    const zonas=["Norte alto","Norte (La Chimba)","Norte-centro","Centro","Casco central","Sur","Sur costero"];
+    const vals=[17.6,13.7,15.2,16.6,12.5,15.6,19.1];
+    const cols=vals.map(v=>v<14?COL.bad:v<16?COL.warn:COL.good);
+    const c=mk("ch-zona");
+    c.setOption({grid:{...BASE_GRID,bottom:8},tooltip:{trigger:"axis",...TT,valueFormatter:v=>v+" km/h"},
+      xAxis:{type:"category",data:zonas,axisLabel:{color:COL.mut,fontSize:9,interval:0,rotate:28},axisLine:{lineStyle:{color:COL.axis}},axisTick:{show:false}},
+      yAxis:{type:"value",name:"km/h",...AXIS_Y,nameTextStyle:{color:COL.mut,fontSize:10}},
+      series:[{type:"bar",barWidth:"58%",data:vals.map((v,i)=>({value:v,itemStyle:{color:cols[i],borderRadius:[4,4,0,0]}})),
+        label:{show:true,position:"top",color:COL.mut,fontSize:10,formatter:p=>p.value}}]});
   })();
 
   // ── ciclo tc/dc ──
@@ -423,21 +413,6 @@ Promise.all([J("territorio.json"), J("cobertura_lineas.json"), J("cumplimiento.j
         {name:"Tiempo (min)",type:"bar",data:tc,itemStyle:{color:COL.mar,borderRadius:[4,4,0,0]},barWidth:"34%"},
         {name:"Distancia (km)",type:"bar",yAxisIndex:1,data:dc,itemStyle:{color:COL.mar3,borderRadius:[4,4,0,0]},barWidth:"34%"}
       ]});
-  })();
-
-  // ── regularidad CV ──
-  (function(){ const c=mk("ch-cv");
-    const cv=l=>{ const d=(BU.lineas[l]||{}).L||{}; return (d.agg||{}).cv||0; };
-    const arr=[...LINEAS].sort((a,b)=>cv(a)-cv(b)); const vals=arr.map(cv);
-    const cols=vals.map(v=>v<0.5?COL.good:v<0.8?COL.warn:COL.bad);
-    c.setOption({grid:BASE_GRID,tooltip:{trigger:"axis",...TT,valueFormatter:v=>(''+Math.round(v*100)/100)},
-      xAxis:{type:"category",data:arr,...AXIS_X},
-      yAxis:{type:"value",name:"CV",...AXIS_Y,nameTextStyle:{color:COL.mut,fontSize:10}},
-      series:[{type:"bar",barWidth:"62%",data:vals.map((v,i)=>({value:v,itemStyle:{color:cols[i],borderRadius:[4,4,0,0]}})),
-        label:{show:true,position:"top",color:COL.mut,fontSize:10,formatter:p=>p.value.toFixed(2)},
-        markLine:{silent:true,symbol:"none",data:[
-          {yAxis:0.4,lineStyle:{color:COL.good,type:"dashed"},label:{formatter:"BRT 0,4",color:COL.good,fontSize:9}},
-          {yAxis:0.8,lineStyle:{color:COL.bad,type:"dashed"},label:{formatter:"apelotonado 0,8",color:COL.bad,fontSize:9}}]}}]});
   })();
 
   // ── modal donut ──
