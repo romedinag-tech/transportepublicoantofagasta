@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=98`).then(r=>r.json());
-const BUILD = "afta-v47";
+const J = n => fetch(`data/${n}?v=99`).then(r=>r.json());
+const BUILD = "afta-v48";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -731,9 +731,12 @@ function _ptSeg(px,py,ax,ay,bx,by){ const dx=bx-ax,dy=by-ay,L2=dx*dx+dy*dy||1e-9
 let _covCache={};
 function coveredManzanas(linea, R=300, sentido=null){      // sentido=null|"amb": ambos · "0"|"1": filtra
   const key=linea+"|"+R+"|"+(sentido||"amb"); if(_covCache[key]) return _covCache[key];
-  const set=new Set(); if(!COB||!COB.features||!GEOM[linea]) return _covCache[key]=set;
+  const gk = GEOM[linea] ? linea : _lineaBase(linea);
+  const set=new Set(); if(!COB||!COB.features||!GEOM[gk]) return _covCache[key]=set;
   let mnLa=9,mxLa=-9,mnLo=9,mxLo=-9; const segs=[];
-  const shapes = (GEOM[linea]||[]).filter(s => !sentido || sentido==="amb" || String(s.s)===String(sentido));
+  const allShapes = GEOM[gk]||[];
+  const varFiltered = esVariante(linea) ? allShapes.filter(s=>s.rec===linea) : allShapes;
+  const shapes = (varFiltered.length ? varFiltered : allShapes).filter(s => !sentido || sentido==="amb" || String(s.s)===String(sentido));
   shapes.forEach(s=>{ const p=s.p; for(let i=0;i<p.length-1;i++){ const a=toM(p[i][0],p[i][1]),b=toM(p[i+1][0],p[i+1][1]); segs.push([a[0],a[1],b[0],b[1]]); }
     p.forEach(pt=>{ mnLa=Math.min(mnLa,pt[0]);mxLa=Math.max(mxLa,pt[0]);mnLo=Math.min(mnLo,pt[1]);mxLo=Math.max(mxLo,pt[1]); }); });
   const pad=0.005;
@@ -1095,8 +1098,8 @@ function renderLineaKpis(){
   const mode=state.mapMode;
   // DETENCIONES: KPIs por línea (det_periodo, por sentido)
   if(state.linea!=="TODAS" && state.vista==="normal" && mode==="det" && DETP&&DETP.lineas){
-    const lb=state.linea, per=state.periodo, sen=state.sentido;
-    const d = DETP.lineas[lb] || {};
+    const lb=_lineaBase(state.linea), per=state.periodo, sen=state.sentido;
+    const d = _lk(DETP.lineas, state.linea) || {};
     const sk = sen==="amb"?"amb":sen;
     const sd = d[sk] || d.amb || {};
     const det = sd[per];
@@ -1122,7 +1125,8 @@ function renderLineaKpis(){
   // BUNCHING: KPIs específicos por línea
   if(state.linea!=="TODAS" && state.vista==="normal" && mode==="bunch" && BUNCH&&BUNCH.lineas){
     const lb = state.linea, dia="L";
-    const d = BUNCH.lineas[lb] && BUNCH.lineas[lb][dia] || {};
+    const bld = _lk(BUNCH.lineas, lb);
+    const d = bld && bld[dia] || {};
     const per = state.periodo, dp = d[per]||{};
     const cv = dp.cv, hw = dp.headway, n = dp.n;
     const dAm = (d.am||{}).cv, dMd=(d.md||{}).cv, dPm=(d.pm||{}).cv, dAgg=(d.agg||{}).cv, dNoche=(d.noche||{}).cv;
@@ -1151,14 +1155,15 @@ function renderLineaKpis(){
     hog+=h;
     if(p.nse===0) hbaj+=h; else if(p.nse===1) hmed+=h; else if(p.nse===2) halt+=h;
   });
-  const row = (CLINE&&CLINE.lineas||[]).find(r=>r.linea===state.linea && r.rec===state.linea)
-              || (CLINE&&CLINE.lineas||[]).find(r=>r.linea===state.linea);
+  const row = (CLINE&&CLINE.lineas||[]).find(r=>r.rec===state.linea)
+              || (CLINE&&CLINE.lineas||[]).find(r=>r.linea===_lineaBase(state.linea) && r.rec===r.linea);
   const ext = row ? row.ext_km : null;
-  const flota = T&&T.cells&&T.cells["TODAS|"+state.linea]&&T.cells["TODAS|"+state.linea].kpi&&T.cells["TODAS|"+state.linea].kpi.flota_total || null;
-  const salL = SALT&&SALT.por_linea&&SALT.por_linea[state.linea]&&SALT.por_linea[state.linea].L || null;
+  const _tcell = (T&&T.cells&&(T.cells["TODAS|"+state.linea]||T.cells["TODAS|"+_lineaBase(state.linea)]))||{};
+  const flota = _tcell.kpi&&_tcell.kpi.flota_total || null;
+  const salL = SALT&&SALT.por_linea&&(_lk(SALT.por_linea, state.linea))&&(_lk(SALT.por_linea, state.linea)).L || null;
   const totSal = salL ? salL.reduce((a,b)=>a+b,0) : null;
   const ciclos = (flota && totSal) ? (totSal/flota/2) : null;
-  const tcMin = T&&T.cells&&T.cells["TODAS|"+state.linea]&&T.cells["TODAS|"+state.linea].kpi&&T.cells["TODAS|"+state.linea].kpi.tc || null;
+  const tcMin = _tcell.kpi&&_tcell.kpi.tc || null;
   const nse = (COB.resumen&&COB.resumen.cob_est&&COB.resumen.cob_est.nse_terciles)||{};
   const card = (cls,lab,val,sub)=>`<div class="lk ${cls}"><div class="lab">${lab}</div><div class="val">${val}</div><div class="sub">${sub}</div></div>`;
   // multiplicador dinámico (solo en modo oferta)
@@ -1441,7 +1446,7 @@ function renderMapa(){
       if(b) b.innerHTML = (()=>{
         const cm = (M==="cover"||M==="oferta") && COB&&COB.features ? coveredManzanas(state.linea) : null;
         let hg=0; if(cm) cm.forEach(i=>hg+=(COB.features[i].properties.hog||0));
-        const row=(CLINE.lineas||[]).find(r=>r.linea===state.linea&&r.rec===state.linea)||(CLINE.lineas||[]).find(r=>r.linea===state.linea);
+        const row=(CLINE.lineas||[]).find(r=>r.rec===state.linea)||(CLINE.lineas||[]).find(r=>r.linea===_lineaBase(state.linea)&&r.rec===r.linea);
         if(M==="cover") return `Línea ${state.linea}: cubre ${cm?cm.size:0} manzanas · ${fmt(hg)} hogares a ≤300 m`;
         if(M==="oferta"){ const f=frecLineaPerDia(state.linea,state.periodo,"L"); const fr=fracDinLinea(f); const H=f>0?(60/f).toFixed(1):"∞";
           return `Línea ${state.linea}: ${f.toFixed(1)} bus/h · headway ${H} min · cobertura dinámica <b>${(fr*100).toFixed(0)}%</b> del tiempo (${periodoLbl(state.periodo)})`; }
