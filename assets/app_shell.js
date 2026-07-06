@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=103`).then(r=>r.json());
-const BUILD = "afta-v52";
+const J = n => fetch(`data/${n}?v=106`).then(r=>r.json());
+const BUILD = "afta-v53";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -40,7 +40,9 @@ function shapeSegsBins(lb, s, bin_m){
 function _haversineM(a,b){ const R=6371000, la1=a[0]*Math.PI/180, la2=b[0]*Math.PI/180, dla=(b[0]-a[0])*Math.PI/180, dlo=(b[1]-a[1])*Math.PI/180;
   const h=Math.sin(dla/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dlo/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
 function lineaShapePrincipal(linea, s){
-  const segs = (GEOM&&GEOM[linea]||[]).filter(x=>+x.s===+s); if(!segs.length) return null;
+  // GEOM está indexado por línea base; para variantes se resuelve la base y se filtra por rec.
+  const gk = (GEOM&&GEOM[linea]) ? linea : _lineaBase(linea);
+  const segs = (GEOM&&GEOM[gk]||[]).filter(x=>+x.s===+s); if(!segs.length) return null;
   let cand = segs.filter(x=>String(x.rec)===String(linea));
   if(!cand.length) cand = segs.slice();
   cand.sort((a,b)=>b.p.length - a.p.length);
@@ -451,67 +453,65 @@ function renderHora(cell){
 
 function renderSalidas(){
   const elc=$("ch-salidas"); if(!elc) return;
-  if(!SALT||!SALT.bins||!SALT.salidas){ return; }
+  if(!CUMP||!CUMP.lineas||!CUMP.horas){ return; }
   if(!salidasChart) salidasChart=echarts.init(elc);
   const th=TH();
-  let i0=SALT.bins.indexOf(300), i1=SALT.bins.indexOf(1380);   // 5:00 .. 23:00
-  if(i0<0) i0=0; if(i1<0) i1=SALT.bins.length-1;
-  const bins=SALT.bins.slice(i0,i1+1);
-  const lab=bins.map(m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"));
-  // Si hay línea elegida y existen series por línea, usar esa; si no, sistema completo.
-  const PL = SALT.por_linea && _lk(SALT.por_linea, state.linea);
-  const Sraw = (state.linea!=="TODAS" && PL) ? PL : SALT.salidas;
-  const S = Sraw.L ? Sraw : {L:Sraw};   // compat estructura vieja (array plano)
+  const HS = CUMP.horas;                                  // [5..23]
+  const lab = HS.map(h=>String(h).padStart(2,"0")+"h");
+  // Fuente CONFIABLE: despachos por corrida (run-based) de cumplimiento.json — reconcilia con el plan
+  // (p.ej. L102 obs 293 / prog 302 ≈ 97%). Observada = obs[t][h]; Exigida (plan MTT/GTFS) = prog[t][h].
+  // Se descarta el conteo de "pasadas por terminal" (SALT) porque sobrecuenta ~3× los despachos reales.
+  let D;
+  if(state.linea!=="TODAS"){
+    const dl=_lk(CUMP.lineas, state.linea);
+    D = dl ? {obs:dl.obs, prog:dl.prog} : null;
+  } else {
+    D = {obs:{}, prog:{}};
+    ["L","S","D"].forEach(t=>{ D.obs[t]=HS.map(_=>0); D.prog[t]=HS.map(_=>0); });
+    Object.keys(CUMP.lineas).filter(k=>!esVariante(k)).forEach(k=>{ const dl=CUMP.lineas[k];
+      ["L","S","D"].forEach(t=>{
+        (dl.obs&&dl.obs[t]||[]).forEach((v,i)=>D.obs[t][i]+=(v||0));
+        (dl.prog&&dl.prog[t]||[]).forEach((v,i)=>D.prog[t][i]+=(v||0)); }); });
+  }
+  const nb=$("salidas-narr");
+  if(!D){ salidasChart.clear(); if(nb) nb.innerHTML=`<div class="hint">Sin frecuencia programada (GTFS) para esta línea.</div>`; return; }
   const smArr = (arr,w)=>{ if(!w||w<2) return arr; const half=Math.floor(w/2);
     return arr.map((v,i)=>{ let s=0,n=0; for(let j=Math.max(0,i-half); j<=Math.min(arr.length-1,i+half); j++){ const x=arr[j]; if(typeof x==="number"){ s+=x; n++; } } return n? +(s/n).toFixed(2):0; }); };
-  const sl = arr => smArr((arr||[]).slice(i0,i1+1), +state.salSm||0);
+  const sl = arr => smArr((arr||[]).map(v=>v||0), +state.salSm||0);   // despachos/hora (con suavizado opcional)
   const DEF = {L:["Laboral","#fb923c","rgba(251,146,60,.16)"], S:["Sábado","#38bdf8","rgba(56,189,248,.14)"], D:["Domingo","#a78bfa","rgba(167,139,250,.14)"]};
   const all = state.salDia==="all";
   const tipos = all ? ["L","S","D"] : [state.salDia];
-  const series = tipos.map(t=>({name:DEF[t][0], type:"line", data:sl(S[t]||[]), smooth:false, symbol:"none",
-    lineStyle:{width:1.9,color:DEF[t][1]}, areaStyle: all?undefined:{color:DEF[t][2]}}));
-  // --- serie programada (GTFS): color blanco/gris claro para distinguir de la observada ---
-  const PR = SALT.prog_linea && _lk(SALT.prog_linea, state.linea);
-  const Praw = (state.linea!=="TODAS" && PR) ? PR : (SALT.prog||null);
-  if(Praw){
-    const PCOL = {L:"#e2e8f0", S:"#e2e8f0", D:"#e2e8f0"};
-    const PNAM = {L:"Programado", S:"Prog. sáb.", D:"Prog. dom."};
-    tipos.forEach(t=>{
-      const pdata = sl(Praw[t]||[]);
-      series.push({name: all?PNAM[t]:"Programado", type:"line", data:pdata, smooth:false, symbol:"none",
-        lineStyle:{width:2, color:PCOL[t], type:[6,4], opacity:.85},
-        areaStyle:undefined, z:0});
-    });
-  }
-  const legendData = [...tipos.map(t=>DEF[t][0]), ...(Praw ? tipos.map(t=>(all?"Prog. "+DEF[t][0].toLowerCase():"Prog. "+DEF[tipos[0]][0].toLowerCase())) : [])];
-  const legendDataReal = series.map(s=>s.name);
+  const obsNam = {L:"Observada (laboral)", S:"Observada (sábado)", D:"Observada (domingo)"};
+  const series = tipos.map(t=>({name: all?DEF[t][0]:obsNam[t], type:"line", data:sl(D.obs[t]), smooth:true, symbol:"none",
+    lineStyle:{width:2.4,color:DEF[t][1]}, areaStyle: all?undefined:{color:DEF[t][2]}}));
+  // --- serie EXIGIDA (plan MTT / GTFS): línea punteada clara ---
+  tipos.forEach(t=>{
+    series.push({name: all?("Exigida "+DEF[t][0].toLowerCase()):("Exigida ("+DEF[t][0].toLowerCase()+")"), type:"line", data:sl(D.prog[t]), smooth:true, symbol:"none",
+      lineStyle:{width:2.2, color:"#e2e8f0", type:[6,4], opacity:.9}, areaStyle:undefined, z:0});
+  });
   salidasChart.setOption({
     textStyle:{fontFamily:"Inter,sans-serif",color:th.tx},
     grid:{left:36,right:14,top:26,bottom:24,containLabel:true},
-    legend:{data:legendDataReal,textStyle:{color:th.mut,fontSize:10},top:0,right:0,itemWidth:14,itemHeight:8},
+    legend:{data:series.map(s=>s.name),textStyle:{color:th.mut,fontSize:10},top:0,right:0,itemWidth:14,itemHeight:8},
     tooltip:{trigger:"axis",backgroundColor:th.tip,borderColor:th.tipB,textStyle:{color:th.tx},
-      formatter:p=>{let s=`${lab[p[0].dataIndex]}`; p.forEach(x=>s+=`<br>${x.marker}${x.seriesName}: <b>${x.value}</b>`); return s;}},
+      formatter:p=>{let s=`${lab[p[0].dataIndex]}`; p.forEach(x=>s+=`<br>${x.marker}${x.seriesName}: <b>${x.value}</b> desp/h`); return s;}},
     xAxis:{type:"category",data:lab,boundaryGap:false,
-      axisLabel:{color:th.mut,fontSize:10,interval:(idx)=>bins[idx]%60===0,formatter:v=>v.slice(0,2)+"h"},
-      axisLine:{lineStyle:{color:th.axis}}},
-    yAxis:{type:"value",name:"buses / 5 min",nameTextStyle:{color:th.mut,fontSize:10},nameGap:6,
+      axisLabel:{color:th.mut,fontSize:10},axisLine:{lineStyle:{color:th.axis}}},
+    yAxis:{type:"value",name:"despachos/hora",nameTextStyle:{color:th.mut,fontSize:10},nameGap:6,min:0,
       axisLabel:{color:th.mut,fontSize:10},splitLine:{lineStyle:{color:th.grid}}},
     series
   },true);
   setTimeout(()=>salidasChart.resize(),60);
-  const nb=$("salidas-narr");
   if(nb){
-    const tot=t=>Math.round((S[t]||[]).reduce((a,b)=>a+b,0));
-    const totp=t=>Praw?Math.round((Praw[t]||[]).reduce((a,b)=>a+b,0)):0;
-    const d=SALT.dias||{};
+    const sumt=(o,t)=>Math.round((o[t]||[]).reduce((a,b)=>a+(b||0),0));
     if(all){
-      nb.innerHTML=`Salidas de buses desde <b>todos los terminales</b> (5 min): comparación <b style="color:#fb923c">laboral</b> ~${tot("L")} · <b style="color:#38bdf8">sábado</b> ~${tot("S")} · <b style="color:#a78bfa">domingo</b> ~${tot("D")} salidas/día. Línea punteada = programado GTFS. El domingo cae el servicio; revela cuánto se reduce la oferta el fin de semana.`;
+      nb.innerHTML=`<b>Frecuencia de despacho</b> (despachos/hora, run-based GPS): <b style="color:#fb923c">laboral</b> ~${sumt(D.obs,"L")} · <b style="color:#38bdf8">sábado</b> ~${sumt(D.obs,"S")} · <b style="color:#a78bfa">domingo</b> ~${sumt(D.obs,"D")} despachos/día. Línea punteada = <b>frecuencia exigida</b> (plan MTT/GTFS). El domingo cae el servicio; revela cuánto se reduce la oferta el fin de semana.`;
     } else {
-      const sal=sl(S[state.salDia]||[]); const mx=Math.max(...sal), mxi=sal.indexOf(mx);
-      const cumpl = totp(state.salDia)>0 ? Math.round(100*tot(state.salDia)/totp(state.salDia)) : null;
-      const lowSal = totp(state.salDia)>0 && totp(state.salDia) < LOW_DESP;
-      const cumplTxt = cumpl!==null ? ` · cumplimiento <b>${cumpl}%</b>${lowSal?AST+' <span class="hint">(muestra pequeña)</span>':''}` : "";
-      nb.innerHTML=`Buses saliendo en bins de ${SALT.bin_min} min · <b>${DEF[state.salDia][0]}</b> (promedio de ${d[state.salDia]||"—"} días). Observado ~<b>${tot(state.salDia)}</b> · programado ~<b>${totp(state.salDia)}</b>${cumplTxt}. Línea punteada = programado GTFS.`;
+      const t=state.salDia, obsD=sumt(D.obs,t), progD=sumt(D.prog,t);
+      const cumpl = progD>0 ? Math.round(100*obsD/progD) : null;
+      const low = progD>0 && progD < LOW_DESP;
+      const cumplTxt = cumpl!==null ? ` · cumplimiento <b>${cumpl}%</b>${low?AST+' <span class="hint">(muestra pequeña)</span>':''}` : "";
+      nb.innerHTML=`<b>Frecuencia de despacho</b> · <b>${DEF[t][0]}</b> (despachos/hora, run-based GPS vs plan). Observado ~<b>${obsD}</b> vs exigido ~<b>${progD}</b> despachos/día${cumplTxt}. Línea sólida = <b>observada</b> (GPS) · punteada = <b>exigida</b> (plan MTT/GTFS).`;
     }
   }
 }
@@ -565,7 +565,9 @@ function renderVelDist(){
   vdChart.on("updateAxisPointer", function(p){
     const a = p && p.axesInfo && p.axesInfo[0]; if(!a || a.value==null){ setVdMarker(null); return; }
     const km = +a.value;
-    const s = state.vdSen==="amb" ? "0" : state.vdSen;       // si "Ambos", marca sobre la ida
+    // sentido para el marcador: el elegido, o si "Ambos", el que tenga datos (variantes uni-direccionales)
+    const s = state.vdSen!=="amb" ? state.vdSen
+      : ((ser["0"]&&ser["0"].some(p=>p.v!=null)) ? "0" : "1");
     const pos = lineaPosAtKm(state.linea, +s, km); if(!pos) return;
     setVdMarker(pos, `km ${km.toFixed(1)} · ${s==="0"?"Ida":"Regreso"}`);
   });
@@ -1182,8 +1184,9 @@ function renderLineaKpis(){
   const ext = row ? row.ext_km : null;
   const _tcell = (T&&T.cells&&(T.cells["TODAS|"+state.linea]||T.cells["TODAS|"+_lineaBase(state.linea)]))||{};
   const flota = _tcell.kpi&&_tcell.kpi.flota_total || null;
-  const salL = SALT&&SALT.por_linea&&(_lk(SALT.por_linea, state.linea))&&(_lk(SALT.por_linea, state.linea)).L || null;
-  const totSal = salL ? salL.reduce((a,b)=>a+b,0) : null;
+  // despachos/día confiables (run-based, cumplimiento.json); 2 despachos = 1 ciclo (ida+regreso)
+  const _cd = _lk(CUMP.lineas||{}, state.linea);
+  const totSal = _cd && _cd.obs_dia && _cd.obs_dia.L!=null ? _cd.obs_dia.L : null;
   const ciclos = (flota && totSal) ? (totSal/flota/2) : null;
   const tcMin = _tcell.kpi&&_tcell.kpi.tc || null;
   const nse = (COB.resumen&&COB.resumen.cob_est&&COB.resumen.cob_est.nse_terciles)||{};
