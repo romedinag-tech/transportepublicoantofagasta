@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Informe Ejecutivo · Oferta de Transporte Público · Antofagasta</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%9A%8C%3C/text%3E%3C/svg%3E"/>
+<script src="assets/echarts.min.js?v=107"></script>
+<style>
+  :root{
+    --mar:#1f4e79; --mar2:#2e75b6; --mar3:#5a9bd4; --marL:#e8f1fa;
+    --cobre:#b06a38; --cobreL:#f3e6db;
+    --tx:#16283a; --muted:#5a6b7b; --dim:#8a99a8;
+    --bg:#ffffff; --panel:#f7fafc; --line:#e4ebf1; --line2:#d3dde6;
+    --good:#2e8b6f; --warn:#c9922b; --bad:#c0563f;
+    --sh:0 1px 3px rgba(20,40,58,.06),0 8px 24px rgba(20,40,58,.05);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:"Segoe UI",-apple-system,system-ui,"Helvetica Neue",Arial,sans-serif;
+    color:var(--tx);background:var(--bg);line-height:1.55;font-size:15px;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{font-family:Georgia,"Times New Roman",serif;font-weight:700;line-height:1.2;color:var(--mar)}
+  a{color:var(--mar2)}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+  .sec{padding:54px 0;border-top:1px solid var(--line)}
+  .sec:first-of-type{border-top:none}
+  .eyebrow{font-family:"Segoe UI",sans-serif;font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--cobre);font-weight:700;margin:0 0 8px}
+  h2{font-size:29px;margin:0 0 6px}
+  .lead{color:var(--muted);font-size:16px;max-width:76ch;margin:6px 0 26px}
+  h3{font-size:19px;margin:30px 0 10px;color:var(--tx)}
+  p{margin:0 0 12px;max-width:80ch}
+  .muted{color:var(--muted)}
+  .small{font-size:13px}
+
+  /* ── Portada ── */
+  .hero{background:linear-gradient(135deg,#173a5c 0%,#1f4e79 55%,#2e75b6 100%);color:#fff;position:relative;overflow:hidden}
+  .hero .wrap{padding-top:66px;padding-bottom:70px;position:relative;z-index:2}
+  .hero h1{color:#fff;font-size:44px;margin:0 0 12px;max-width:20ch}
+  .hero .sub{font-size:19px;color:#cfe1f2;margin:0 0 4px}
+  .hero .meta{font-size:13.5px;color:#a9c6e2;margin-top:26px;letter-spacing:.02em}
+  .hero .kick{display:inline-block;font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    color:#e9c7a9;font-weight:700;margin-bottom:18px}
+  .coast{position:absolute;left:0;right:0;bottom:-1px;height:70px;z-index:1;opacity:.5}
+  .hero .badge{position:absolute;top:30px;right:24px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);padding:6px 12px;border-radius:20px;color:#fff}
+
+  /* ── KPIs ── */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:8px 0 6px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 16px 14px;box-shadow:var(--sh)}
+  .kpi .v{font-size:30px;font-weight:700;color:var(--mar);font-family:Georgia,serif;line-height:1;letter-spacing:-.01em}
+  .kpi .l{font-size:12.5px;color:var(--muted);margin-top:8px;font-weight:600}
+  .kpi .s{font-size:11.5px;color:var(--dim);margin-top:3px}
+  .kpi.acc{background:linear-gradient(135deg,#fbf5ef,#f7ede2);border-color:var(--cobreL)}
+  .kpi.acc .v{color:var(--cobre)}
+
+  /* ── charts ── */
+  .chart{width:100%;height:380px}
+  .chart.tall{height:440px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 16px 8px;box-shadow:var(--sh)}
+  .card h4{margin:2px 4px 2px;font-size:15px;font-family:"Segoe UI",sans-serif;font-weight:700;color:var(--tx)}
+  .card .cap{margin:0 4px 8px;font-size:12.5px;color:var(--dim)}
+
+  /* ── tabla ── */
+  .tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh)}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{padding:8px 11px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  thead th{background:var(--mar);color:#fff;font-weight:600;position:sticky;top:0;font-size:12px}
+  tbody tr:nth-child(even){background:var(--panel)}
+  tbody tr:hover{background:var(--marL)}
+  td.grp{font-weight:700;color:var(--mar)}
+  .pill{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;font-weight:700}
+  .pill.g{background:#e3f3ec;color:var(--good)} .pill.w{background:#faf0d9;color:var(--warn)} .pill.b{background:#f8e6e0;color:var(--bad)}
+
+  /* ── callouts ── */
+  .cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:12px}
+  .callout{border-radius:14px;padding:18px;border:1px solid var(--line);background:var(--panel)}
+  .callout h4{margin:0 0 8px;font-size:15px;font-family:"Segoe UI",sans-serif}
+  .callout ul{margin:0;padding-left:18px} .callout li{margin:6px 0;font-size:13.5px;color:var(--tx)}
+  .callout.good{border-top:3px solid var(--good)} .callout.warn{border-top:3px solid var(--warn)} .callout.rec{border-top:3px solid var(--mar2)}
+  .note{background:var(--marL);border-left:3px solid var(--mar2);border-radius:0 10px 10px 0;padding:12px 16px;margin:14px 0;font-size:13.5px;color:var(--tx)}
+  .foot{padding:34px 0 60px;color:var(--dim);font-size:12.5px;text-align:center;border-top:1px solid var(--line)}
+
+  /* ── nav ── */
+  .topnav{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line);font-size:13px}
+  .topnav .wrap{display:flex;align-items:center;gap:4px;height:48px;overflow-x:auto}
+  .topnav a{color:var(--muted);text-decoration:none;padding:6px 11px;border-radius:8px;white-space:nowrap;font-weight:600}
+  .topnav a:hover{background:var(--marL);color:var(--mar)}
+  .topnav .home{margin-left:auto;color:var(--cobre)}
+  @media(max-width:860px){ .kpis{grid-template-columns:repeat(2,1fr)} .grid2{grid-template-columns:1fr} .cols3{grid-template-columns:1fr} .hero h1{font-size:33px} h2{font-size:24px} }
+</style>
+</head>
+<body>
+
+<!-- PORTADA -->
+<header class="hero">
+  <div class="badge">Junio 2025 · GPS</div>
+  <div class="wrap">
+    <span class="kick">Análisis de la oferta · Transporte público en buses</span>
+    <h1>Situación del Transporte Público de Antofagasta</h1>
+    <div class="sub">Diagnóstico de recorridos, cobertura, frecuencia, velocidad y demanda</div>
+    <div class="sub" style="color:#9ec1e0;font-size:16px">13 líneas base · 30 recorridos · 711 buses · ~11,8 millones de pulsos GPS</div>
+    <div class="meta">Rodrigo Medina G. · romedinag@gmail.com · Datos GPS junio 2025 · Censo 2024 (INE)</div>
+  </div>
+  <svg class="coast" viewBox="0 0 1200 70" preserveAspectRatio="none"><path d="M0,40 C120,10 220,55 340,38 C470,20 560,58 700,42 C840,26 950,56 1070,40 C1130,32 1170,44 1200,38 L1200,70 L0,70 Z" fill="#ffffff"/></svg>
+</header>
+
+<nav class="topnav"><div class="wrap">
+  <a href="#resumen">Resumen</a>
+  <a href="#rutas">Rutas y cobertura</a>
+  <a href="#perfil">Perfil de líneas</a>
+  <a href="#frecuencia">Frecuencia</a>
+  <a href="#velocidad">Velocidad y demoras</a>
+  <a href="#regularidad">Regularidad</a>
+  <a href="#demanda">Demanda</a>
+  <a href="#conclusiones">Conclusiones</a>
+  <a class="home" href="index.html">← Tablero interactivo</a>
+</div></nav>
+
+<!-- RESUMEN EJECUTIVO -->
+<section class="sec" id="resumen"><div class="wrap">
+  <div class="eyebrow">Resumen ejecutivo</div>
+  <h2>Un sistema de amplia cobertura y frecuencia sostenida</h2>
+  <p class="lead">Antofagasta opera un sistema de buses con <b>13 líneas base y 17 variantes</b> (30 recorridos en total),
+  gestionado por 12 Unidades de Negocio —11 empresas diésel y la línea eléctrica E01—. El análisis se basa en
+  <b>~11,8 millones de pulsos GPS</b> de junio 2025, map-matched al 97% sobre la malla oficial, y en el
+  <b>Censo 2024</b> para la demanda y la cobertura socioeconómica.</p>
+
+  <div class="kpis" id="kpi-grid"></div>
+
+  <div class="note" id="resumen-note">Cargando indicadores del sistema…</div>
+</div></section>
+
+<!-- RUTAS Y COBERTURA -->
+<section class="sec" id="rutas"><div class="wrap">
+  <div class="eyebrow">Configuración de rutas</div>
+  <h2>Recorridos, variantes y cobertura territorial</h2>
+  <p class="lead">Cada línea base se despliega en uno o más <b>recorridos variantes</b> (sufijos N, Y1, Y2…) que ajustan
+  el trazado —acortan, desvían o refuerzan un sentido—. La cobertura territorial se mide como los <b>hogares dentro de
+  300 m</b> del trazado, y su intensidad como <b>hogares por kilómetro</b> de recorrido. A continuación, la cobertura
+  se reporta <b>para cada variante</b>, no solo para la línea base.</p>
+
+  <div class="grid2">
+    <div class="card"><h4>Intensidad de cobertura por línea</h4><div class="cap">Hogares dentro de 300 m, por km de trazado (recorrido base)</div><div id="ch-hogkm" class="chart"></div></div>
+    <div class="card"><h4>Cobertura por nivel socioeconómico</h4><div class="cap">Hogares en buffer 300 m · terciles por escolaridad (Censo 2024)</div><div id="ch-nse" class="chart"></div></div>
+  </div>
+
+  <h3>Cobertura territorial por variante</h3>
+  <p>Las variantes cambian de forma relevante la cobertura: acortan el trazado (menos hogares alcanzados) o reorientan
+  el servicio hacia sectores de distinto perfil socioeconómico. La tabla siguiente reporta, <b>para cada uno de los 30
+  recorridos</b>, su extensión, los hogares cubiertos, la intensidad (hog/km) y la composición por NSE.</p>
+  <div class="tbl-wrap"><table id="tbl-var"><thead></thead><tbody></tbody></table></div>
+  <div class="note" id="var-note"></div>
+</div></section>
+
+<!-- PERFIL COMPARATIVO — 5 HISTOGRAMAS -->
+<section class="sec" id="perfil"><div class="wrap">
+  <div class="eyebrow">Perfil comparativo de líneas</div>
+  <h2>Cinco variables, comparadas línea a línea</h2>
+  <p class="lead">En lugar de un gráfico de araña —difícil de leer cuando se superponen 13 líneas—, cada variable se
+  presenta como un <b>histograma independiente</b> ordenado, que permite comparar directamente el desempeño de cada
+  línea en esa dimensión.</p>
+  <div class="grid2">
+    <div class="card"><h4>1 · Extensión del recorrido</h4><div class="cap">km, ida (recorrido base)</div><div id="ch-ext" class="chart"></div></div>
+    <div class="card"><h4>2 · Intensidad de cobertura</h4><div class="cap">hogares por km de trazado</div><div id="ch-hogkm2" class="chart"></div></div>
+    <div class="card"><h4>3 · Velocidad comercial</h4><div class="cap">km/h, incluye paradas</div><div id="ch-vel" class="chart"></div></div>
+    <div class="card"><h4>4 · Flota en punta</h4><div class="cap">buses simultáneos en hora punta</div><div id="ch-flota" class="chart"></div></div>
+  </div>
+  <div class="card" style="margin-top:26px"><h4>5 · Frecuencia en punta</h4><div class="cap">despachos por hora en la hora de mayor servicio (día laboral)</div><div id="ch-freq" class="chart"></div></div>
+</div></section>
+
+<!-- FRECUENCIA -->
+<section class="sec" id="frecuencia"><div class="wrap">
+  <div class="eyebrow">Frecuencia y cumplimiento</div>
+  <h2>Lo programado frente a lo observado</h2>
+  <p class="lead">Se compara la <b>frecuencia exigida</b> (plan del Ministerio de Transporte, vía GTFS) con la
+  <b>frecuencia observada</b> por GPS (despachos por corrida). El cumplimiento del sistema en día laboral es alto,
+  con déficits localizados en algunas líneas.</p>
+  <div class="grid2">
+    <div class="card"><h4>Frecuencia del sistema por hora</h4><div class="cap">despachos/hora · exigida (plan) vs observada (GPS), día laboral</div><div id="ch-freqsys" class="chart"></div></div>
+    <div class="card"><h4>Cumplimiento por línea</h4><div class="cap">observado ÷ programado · día laboral</div><div id="ch-cumpl" class="chart"></div></div>
+  </div>
+  <div class="note" id="freq-note"></div>
+</div></section>
+
+<!-- VELOCIDAD Y DEMORAS -->
+<section class="sec" id="velocidad"><div class="wrap">
+  <div class="eyebrow">Velocidad y demoras</div>
+  <h2>Velocidad comercial y tiempo detenido</h2>
+  <p class="lead">La velocidad comercial (distancia sobre tiempo, incluyendo paradas) y el porcentaje del tiempo en que
+  el bus está detenido en ruta —excluyendo terminales— revelan dónde el servicio pierde eficiencia.</p>
+  <div class="grid2">
+    <div class="card"><h4>Velocidad y % detenido por hora</h4><div class="cap">sistema, día laboral</div><div id="ch-velh" class="chart"></div></div>
+    <div class="card"><h4>Tiempo detenido por línea</h4><div class="cap">% del tiempo en ruta (excl. terminales), promedio AM/MD/PM</div><div id="ch-det" class="chart"></div></div>
+  </div>
+  <h3>Tiempo y distancia de ciclo</h3>
+  <div class="card"><h4>Ciclo por línea</h4><div class="cap">ida + regreso · tiempo (min, medido por GPS) y distancia (km)</div><div id="ch-ciclo" class="chart tall"></div></div>
+</div></section>
+
+<!-- REGULARIDAD -->
+<section class="sec" id="regularidad"><div class="wrap">
+  <div class="eyebrow">Regularidad del servicio</div>
+  <h2>¿Llegan parejos o apelotonados?</h2>
+  <p class="lead">La regularidad se mide con el <b>coeficiente de variación (CV) de los intervalos</b> entre buses
+  (headways). CV bajo = buses parejos; CV alto = apelotonamiento (dos buses juntos y luego un vacío largo).</p>
+  <div class="card"><h4>Regularidad por línea (CV de headways)</h4><div class="cap">día laboral · umbral BRT 0,4 · apelotonado ≥ 0,8</div><div id="ch-cv" class="chart tall"></div></div>
+</div></section>
+
+<!-- DEMANDA -->
+<section class="sec" id="demanda"><div class="wrap">
+  <div class="eyebrow">Demanda</div>
+  <h2>Partición modal (Censo 2024)</h2>
+  <p class="lead">Antofagasta muestra una <b>alta dependencia del transporte público</b>: casi la mitad de los viajes
+  al trabajo se realizan en bus, lo que da al sistema un rol estructural en la movilidad de la ciudad.</p>
+  <div class="grid2">
+    <div class="card"><h4>Reparto de viajes al trabajo</h4><div class="cap">Censo 2024 · ocupados que viajan al trabajo</div><div id="ch-modal" class="chart"></div></div>
+    <div style="align-self:center">
+      <div class="kpis" style="grid-template-columns:1fr 1fr">
+        <div class="kpi acc"><div class="v">45%</div><div class="l">Transporte público</div><div class="s">≈ 122.000 personas</div></div>
+        <div class="kpi"><div class="v">27%</div><div class="l">Automóvil</div></div>
+        <div class="kpi"><div class="v">8%</div><div class="l">Caminata</div></div>
+        <div class="kpi"><div class="v">2%</div><div class="l">Bici + moto</div></div>
+      </div>
+      <div class="note">La dependencia del bus refuerza la importancia de sostener frecuencia y regularidad: cada
+      deterioro del servicio impacta directamente a la mayoría de quienes se desplazan al trabajo.</div>
+    </div>
+  </div>
+</div></section>
+
+<!-- CONCLUSIONES -->
+<section class="sec" id="conclusiones"><div class="wrap">
+  <div class="eyebrow">Conclusiones</div>
+  <h2>Fortalezas, brechas y recomendaciones</h2>
+  <div class="cols3">
+    <div class="callout good"><h4>✓ Fortalezas</h4><ul>
+      <li>Cobertura territorial amplia: ~1.850 hogares/km promedio, con buena penetración en todos los NSE.</li>
+      <li>Frecuencia sostenida durante el día, sin caídas bruscas entre puntas.</li>
+      <li>Velocidad comercial razonable (~15,5 km/h) para una ciudad lineal con congestión moderada.</li>
+      <li>Cumplimiento del sistema alto (≈94% en día laboral) frente al plan.</li>
+    </ul></div>
+    <div class="callout warn"><h4>⚠ Áreas de mejora</h4><ul>
+      <li>Regularidad: varias líneas con CV ≥ 0,8 (apelotonamiento), especialmente 129, 107, 108 y 111.</li>
+      <li>Cumplimiento: 112 (~79%) y 104 (~80%) por debajo del estándar.</li>
+      <li>Demoras localizadas: puntos críticos de detención concentran tiempo perdido por bus/día.</li>
+      <li>Equidad: desbalance entre frecuencia ofertada y perfil socioeconómico en algunos ejes.</li>
+    </ul></div>
+    <div class="callout rec"><h4>→ Recomendaciones</h4><ul>
+      <li>Gestión de flota en tiempo real para atacar el apelotonamiento (control de headways).</li>
+      <li>Reforzar la programación de 112 y 104 hasta cerrar la brecha de cumplimiento.</li>
+      <li>Intervenir los puntos de demora recurrentes (prioridad de bus, paraderos).</li>
+      <li>Revisar variantes de baja cobertura y su aporte real a la equidad territorial.</li>
+    </ul></div>
+  </div>
+</div></section>
+
+<div class="foot">
+  Informe generado a partir del tablero analítico de Antofagasta · Datos GPS junio 2025 · Censo 2024 (INE) ·
+  Rodrigo Medina G. · <a href="index.html">Volver al tablero interactivo</a>
+</div>
+
+<script>
+const LINEAS = ["102","103","104","107","108","110","111","112","114","119","121","129","E01"];
+const COL = {mar:"#1f4e79", mar2:"#2e75b6", mar3:"#7fb0dd", cobre:"#b06a38",
+  good:"#2e8b6f", warn:"#c9922b", bad:"#c0563f", axis:"#c7d3dd", grid:"#eef3f7", tx:"#16283a", mut:"#5a6b7b"};
+const J = n => fetch("data/"+n+"?v=107").then(r=>r.json());
+const NF = new Intl.NumberFormat("es-CL");
+const fmt = n => NF.format(Math.round(n||0));
+const $ = id => document.getElementById(id);
+const charts = [];
+function mk(id){ const c = echarts.init($(id)); charts.push(c); return c; }
+const BASE_GRID = {left:8,right:16,top:24,bottom:8,containLabel:true};
+const AXIS_X = {axisLabel:{color:COL.mut,fontSize:11},axisLine:{lineStyle:{color:COL.axis}},axisTick:{show:false}};
+const AXIS_Y = {axisLabel:{color:COL.mut,fontSize:11},splitLine:{lineStyle:{color:COL.grid}},axisLine:{show:false}};
+const TT = {backgroundColor:"#fff",borderColor:"#e4ebf1",textStyle:{color:COL.tx},extraCssText:"box-shadow:0 6px 24px rgba(20,40,58,.12)"};
+window.addEventListener("resize", ()=>charts.forEach(c=>c.resize()));
+
+// histograma de barras vertical ordenado, con línea de promedio opcional
+function barChart(id, cats, vals, opts={}){
+  const c = mk(id);
+  const avg = vals.reduce((a,b)=>a+(b||0),0)/vals.length;
+  const series = [{type:"bar", data:vals.map(v=>({value:v, itemStyle:{color:opts.color||COL.mar2, borderRadius:[4,4,0,0]}})),
+    barWidth:"62%", label:{show:opts.label!==false, position:"top", color:COL.mut, fontSize:10,
+      formatter:p=>opts.fmt?opts.fmt(p.value):(''+Math.round(p.value*10)/10)}}];
+  const ml = opts.avg!==false ? {silent:true, symbol:"none", lineStyle:{color:COL.cobre,type:"dashed",width:1.4},
+    data:[{yAxis:avg, label:{formatter:"prom "+(opts.fmt?opts.fmt(avg):Math.round(avg*10)/10), color:COL.cobre, fontSize:10, position:"end"}}]} : null;
+  if(ml) series[0].markLine = ml;
+  c.setOption({grid:BASE_GRID, tooltip:{trigger:"axis",...TT, valueFormatter:v=>opts.fmt?opts.fmt(v):v},
+    xAxis:{type:"category", data:cats, ...AXIS_X},
+    yAxis:{type:"value", name:opts.unit||"", nameTextStyle:{color:COL.mut,fontSize:10}, ...AXIS_Y},
+    series});
+}
+
+Promise.all([J("territorio.json"), J("cobertura_lineas.json"), J("cumplimiento.json"),
+  J("bunching.json"), J("det_periodo.json")]).then(([T,CL,CU,BU,DP])=>{
+
+  const kpi = T.cells["TODAS|TODAS"].kpi;
+  const kOf = l => (T.cells["TODAS|"+l]||{}).kpi||{};
+  const nVar = (T.lineas||[]).reduce((s,l)=>s+((l.variantes||[]).length),0);
+  const base = {}; CL.lineas.forEach(r=>{ if(r.rec===r.linea) base[r.linea]=r; });
+  const freqPunta = l => { const o=(CU.lineas[l]||{}).obs; return o&&o.L ? Math.max(...o.L) : 0; };
+
+  // ── KPIs ──
+  const kpis = [
+    {v:kpi.flota_total, l:"Flota total", s:fmt(kpi.flota_pico)+" en punta simultánea", acc:true},
+    {v:kpi.vel.toFixed(1)+" km/h", l:"Velocidad comercial", s:"incluye paradas"},
+    {v:"94%", l:"Cumplimiento", s:"observado ÷ programado · laboral"},
+    {v:Math.round(kpi.tc/60*10)/10+" h", l:"Tiempo de ciclo", s:kpi.tc+" min · "+kpi.dc.toFixed(0)+" km (ida+regreso)"},
+    {v:"13 + 17", l:"Líneas + variantes", s:"30 recorridos · 12 U. de Negocio"},
+    {v:kpi.pct_det.toFixed(1)+"%", l:"Tiempo detenido", s:"en ruta, excl. terminales"},
+    {v:"~1.850", l:"Hogares por km", s:"cobertura promedio · buffer 300 m"},
+    {v:"45%", l:"Demanda en bus", s:"partición modal · Censo 2024", acc:true},
+  ];
+  $("kpi-grid").innerHTML = kpis.map(k=>`<div class="kpi${k.acc?' acc':''}"><div class="v">${typeof k.v==='number'?fmt(k.v):k.v}</div><div class="l">${k.l}</div><div class="s">${k.s||''}</div></div>`).join("");
+  $("resumen-note").innerHTML = `<b>Lectura rápida:</b> el sistema moviliza <b>${fmt(kpi.flota_total)} buses</b> (punta de
+    <b>${fmt(kpi.flota_pico)}</b> simultáneos) a <b>${kpi.vel.toFixed(1)} km/h</b>, con un ciclo medio de
+    <b>${kpi.tc} min</b> y <b>${kpi.dc.toFixed(0)} km</b>. La oferta cumple ~94% del plan en día laboral y cubre el
+    territorio con buena intensidad, sirviendo al 45% de los viajes al trabajo de la ciudad.`;
+
+  // ── cobertura hog/km (base) ──
+  const byHK = [...LINEAS].sort((a,b)=>base[a].hog_km-base[b].hog_km);
+  barChart("ch-hogkm", byHK, byHK.map(l=>base[l].hog_km), {unit:"hog/km", color:COL.mar2, fmt:v=>fmt(v)});
+  barChart("ch-hogkm2", byHK, byHK.map(l=>base[l].hog_km), {unit:"hog/km", color:COL.mar, fmt:v=>fmt(v)});
+
+  // ── NSE apilado ──
+  (function(){ const c=mk("ch-nse");
+    const S=(k,col,nm)=>({name:nm,type:"bar",stack:"h",data:LINEAS.map(l=>base[l][k]),itemStyle:{color:col},barWidth:"60%"});
+    c.setOption({grid:{...BASE_GRID,top:34},legend:{top:0,textStyle:{color:COL.mut,fontSize:11},itemWidth:12,itemHeight:8},
+      tooltip:{trigger:"axis",...TT,valueFormatter:v=>fmt(v)+" hog"},
+      xAxis:{type:"category",data:LINEAS,...AXIS_X},
+      yAxis:{type:"value",...AXIS_Y,axisLabel:{...AXIS_Y.axisLabel,formatter:v=>(v/1000)+"k"}},
+      series:[S("hog_baj","#c0563f","NSE bajo"),S("hog_med","#c9922b","NSE medio"),S("hog_alt","#2e8b6f","NSE alto")]});
+  })();
+
+  // ── tabla por variante ──
+  const th = `<tr><th>Recorrido</th><th>Línea</th><th>Ext. km</th><th>Hogares</th><th>Hog/km</th><th>NSE bajo</th><th>NSE medio</th><th>NSE alto</th><th>Vel km/h</th></tr>`;
+  $("tbl-var").querySelector("thead").innerHTML = th;
+  const rows = CL.lineas.map(r=>{
+    const esBase = r.rec===r.linea;
+    const pB=Math.round(100*r.hog_baj/r.hog), pM=Math.round(100*r.hog_med/r.hog), pA=Math.round(100*r.hog_alt/r.hog);
+    return `<tr><td class="${esBase?'grp':''}">${r.rec}${esBase?' <span class="pill g">base</span>':''}</td><td>${r.linea}</td>
+      <td>${r.ext_km.toFixed(1)}</td><td>${fmt(r.hog)}</td><td>${fmt(r.hog_km)}</td>
+      <td>${pB}%</td><td>${pM}%</td><td>${pA}%</td><td>${r.vel.toFixed(1)}</td></tr>`;
+  }).join("");
+  $("tbl-var").querySelector("tbody").innerHTML = rows;
+  $("var-note").innerHTML = `<b>Interpretación:</b> las variantes acortan o reorientan el trazado. Ejemplos: la
+    <b>102Y2</b> (18,9 km) cubre solo 34.782 hogares frente a los 60.662 del recorrido base 102; la <b>104Y1</b>
+    concentra su cobertura en NSE bajo (solo 8% de hogares NSE alto), mientras la <b>119</b> —con la menor intensidad
+    del sistema (1.171 hog/km)— sirve mayoritariamente sectores de NSE alto. Reportar cada variante evita atribuir a
+    la línea base una cobertura que, en la práctica, varía según el recorrido efectivamente operado.`;
+
+  // ── 5 histogramas del perfil ──
+  const byExt=[...LINEAS].sort((a,b)=>base[a].ext_km-base[b].ext_km);
+  barChart("ch-ext", byExt, byExt.map(l=>base[l].ext_km), {unit:"km", color:COL.mar2, fmt:v=>v.toFixed(1)});
+  const byVel=[...LINEAS].sort((a,b)=>base[a].vel-base[b].vel);
+  barChart("ch-vel", byVel, byVel.map(l=>base[l].vel), {unit:"km/h", color:COL.mar, fmt:v=>v.toFixed(1)});
+  const byFl=[...LINEAS].sort((a,b)=>(kOf(a).flota_pico||0)-(kOf(b).flota_pico||0));
+  barChart("ch-flota", byFl, byFl.map(l=>Math.round(kOf(l).flota_pico||0)), {unit:"buses", color:COL.mar2, fmt:v=>fmt(v)});
+  const byFq=[...LINEAS].sort((a,b)=>freqPunta(a)-freqPunta(b));
+  barChart("ch-freq", byFq, byFq.map(l=>freqPunta(l)), {unit:"desp/h", color:COL.mar, fmt:v=>fmt(v)});
+
+  // ── frecuencia sistema por hora ──
+  (function(){ const c=mk("ch-freqsys"); const HS=CU.horas;
+    const prog=HS.map((_,i)=>LINEAS.reduce((s,l)=>s+((CU.lineas[l].prog.L[i])||0),0));
+    const obs =HS.map((_,i)=>LINEAS.reduce((s,l)=>s+((CU.lineas[l].obs.L[i])||0),0));
+    c.setOption({grid:{...BASE_GRID,top:34},legend:{top:0,textStyle:{color:COL.mut,fontSize:11},itemWidth:14,itemHeight:8},
+      tooltip:{trigger:"axis",...TT,valueFormatter:v=>Math.round(v)+" desp/h"},
+      xAxis:{type:"category",data:HS.map(h=>h+"h"),boundaryGap:false,...AXIS_X},
+      yAxis:{type:"value",name:"desp/h",nameTextStyle:{color:COL.mut,fontSize:10},...AXIS_Y},
+      series:[
+        {name:"Exigida (plan)",type:"line",data:prog,smooth:true,symbol:"none",lineStyle:{color:COL.cobre,width:2,type:"dashed"}},
+        {name:"Observada (GPS)",type:"line",data:obs,smooth:true,symbol:"none",areaStyle:{color:"rgba(46,117,182,.12)"},lineStyle:{color:COL.mar2,width:2.4}}
+      ]});
+  })();
+
+  // ── cumplimiento por línea ──
+  (function(){ const c=mk("ch-cumpl");
+    const vals=LINEAS.map(l=>CU.lineas[l].cumpl.L);
+    const cols=vals.map(v=>v==null?"#ccc":v<80?COL.bad:v<95?COL.warn:COL.good);
+    c.setOption({grid:BASE_GRID,tooltip:{trigger:"axis",...TT,valueFormatter:v=>v+"%"},
+      xAxis:{type:"category",data:LINEAS,...AXIS_X},
+      yAxis:{type:"value",name:"%",...AXIS_Y,nameTextStyle:{color:COL.mut,fontSize:10}},
+      series:[{type:"bar",barWidth:"62%",data:vals.map((v,i)=>({value:v,itemStyle:{color:cols[i],borderRadius:[4,4,0,0]}})),
+        label:{show:true,position:"top",color:COL.mut,fontSize:10,formatter:p=>Math.round(p.value)+"%"},
+        markLine:{silent:true,symbol:"none",lineStyle:{color:COL.mar,type:"dashed"},data:[{yAxis:100,label:{formatter:"100%",color:COL.mar,fontSize:10}}]}}]});
+  })();
+  $("freq-note").innerHTML = `El sistema despacha ~94% de lo programado en día laboral. Destacan por déficit
+    <b>112</b> y <b>104</b> (~79–80%); por exceso, <b>119</b> y <b>129</b> superan el 100%. La curva horaria muestra
+    una oferta pareja, sin el colapso de servicio entre puntas que se observa en otras ciudades.`;
+
+  // ── velocidad y % detenido por hora ──
+  (function(){ const c=mk("ch-velh"); const H=T.cells["TODAS|TODAS"].horas;
+    const hrs=[],vel=[],det=[]; H.forEach((x,h)=>{ if(x&&x.v>0&&h>=6&&h<=23){hrs.push(h+"h");vel.push(x.v);det.push(x.d);} });
+    c.setOption({grid:{...BASE_GRID,top:34,right:44},legend:{top:0,textStyle:{color:COL.mut,fontSize:11},itemWidth:14,itemHeight:8},
+      tooltip:{trigger:"axis",...TT},
+      xAxis:{type:"category",data:hrs,boundaryGap:false,...AXIS_X},
+      yAxis:[{type:"value",name:"km/h",min:10,max:26,...AXIS_Y,nameTextStyle:{color:COL.mut,fontSize:10}},
+             {type:"value",name:"% det",min:0,max:40,...AXIS_Y,splitLine:{show:false},nameTextStyle:{color:COL.mut,fontSize:10}}],
+      series:[
+        {name:"Velocidad",type:"line",data:vel,smooth:true,symbol:"circle",symbolSize:5,lineStyle:{color:COL.mar,width:2.6},itemStyle:{color:COL.mar}},
+        {name:"% detenido",type:"line",yAxisIndex:1,data:det,smooth:true,symbol:"none",areaStyle:{color:"rgba(192,86,63,.10)"},lineStyle:{color:COL.bad,width:1.6,type:"dashed"}}
+      ]});
+  })();
+
+  // ── % detenido por línea ──
+  (function(){ const c=mk("ch-det");
+    const pd=l=>{ const a=(DP.lineas[l]||{}).amb||{}; const v=["am","md","pm"].map(p=>a[p]).filter(x=>x!=null); return v.length?v.reduce((s,b)=>s+b,0)/v.length:0; };
+    const arr=[...LINEAS].sort((a,b)=>pd(b)-pd(a)); const vals=arr.map(pd);
+    barChart("ch-det", arr, vals, {unit:"%", color:COL.bad, fmt:v=>v.toFixed(1)+"%"});
+  })();
+
+  // ── ciclo tc/dc ──
+  (function(){ const c=mk("ch-ciclo");
+    const tc=LINEAS.map(l=>kOf(l).tc), dc=LINEAS.map(l=>kOf(l).dc);
+    c.setOption({grid:{...BASE_GRID,top:34,right:44},legend:{top:0,textStyle:{color:COL.mut,fontSize:11},itemWidth:12,itemHeight:8},
+      tooltip:{trigger:"axis",...TT},
+      xAxis:{type:"category",data:LINEAS,...AXIS_X},
+      yAxis:[{type:"value",name:"min",...AXIS_Y,nameTextStyle:{color:COL.mut,fontSize:10}},
+             {type:"value",name:"km",...AXIS_Y,splitLine:{show:false},nameTextStyle:{color:COL.mut,fontSize:10}}],
+      series:[
+        {name:"Tiempo (min)",type:"bar",data:tc,itemStyle:{color:COL.mar,borderRadius:[4,4,0,0]},barWidth:"34%"},
+        {name:"Distancia (km)",type:"bar",yAxisIndex:1,data:dc,itemStyle:{color:COL.mar3,borderRadius:[4,4,0,0]},barWidth:"34%"}
+      ]});
+  })();
+
+  // ── regularidad CV ──
+  (function(){ const c=mk("ch-cv");
+    const cv=l=>{ const d=(BU.lineas[l]||{}).L||{}; return (d.agg||{}).cv||0; };
+    const arr=[...LINEAS].sort((a,b)=>cv(a)-cv(b)); const vals=arr.map(cv);
+    const cols=vals.map(v=>v<0.5?COL.good:v<0.8?COL.warn:COL.bad);
+    c.setOption({grid:BASE_GRID,tooltip:{trigger:"axis",...TT,valueFormatter:v=>(''+Math.round(v*100)/100)},
+      xAxis:{type:"category",data:arr,...AXIS_X},
+      yAxis:{type:"value",name:"CV",...AXIS_Y,nameTextStyle:{color:COL.mut,fontSize:10}},
+      series:[{type:"bar",barWidth:"62%",data:vals.map((v,i)=>({value:v,itemStyle:{color:cols[i],borderRadius:[4,4,0,0]}})),
+        label:{show:true,position:"top",color:COL.mut,fontSize:10,formatter:p=>p.value.toFixed(2)},
+        markLine:{silent:true,symbol:"none",data:[
+          {yAxis:0.4,lineStyle:{color:COL.good,type:"dashed"},label:{formatter:"BRT 0,4",color:COL.good,fontSize:9}},
+          {yAxis:0.8,lineStyle:{color:COL.bad,type:"dashed"},label:{formatter:"apelotonado 0,8",color:COL.bad,fontSize:9}}]}}]});
+  })();
+
+  // ── modal donut ──
+  (function(){ const c=mk("ch-modal");
+    const data=[{name:"Transporte público",value:45,itemStyle:{color:COL.mar}},
+      {name:"Automóvil",value:27,itemStyle:{color:COL.cobre}},
+      {name:"Otros",value:18,itemStyle:{color:"#9aa7b3"}},
+      {name:"Caminata",value:8,itemStyle:{color:COL.good}},
+      {name:"Moto",value:1,itemStyle:{color:"#c9922b"}},
+      {name:"Bicicleta",value:1,itemStyle:{color:COL.mar3}}];
+    c.setOption({tooltip:{...TT,formatter:p=>`${p.name}: <b>${p.value}%</b>`},
+      legend:{orient:"vertical",right:0,top:"center",textStyle:{color:COL.mut,fontSize:12},itemWidth:12,itemHeight:8},
+      series:[{type:"pie",radius:["46%","72%"],center:["38%","52%"],avoidLabelOverlap:true,
+        label:{formatter:"{d}%",color:COL.tx,fontSize:11,fontWeight:"bold"},labelLine:{length:8,length2:6},
+        data}]});
+  })();
+
+}).catch(e=>{ $("resumen-note").innerHTML = "No se pudieron cargar los datos: "+e; });
+</script>
+</body>
+</html>

@@ -12,8 +12,8 @@
 <!-- Rotación del mapa (Antofagasta es muy larga N-S; permite verla horizontal) -->
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
 <!-- Componentes y variables de tema existentes (kpi, ctab, litem, rank-row, cump-row, seg…) -->
-<link rel="stylesheet" href="assets/styles.css?v=106">
-<link rel="stylesheet" href="assets/shell.css?v=106">
+<link rel="stylesheet" href="assets/styles.css?v=107">
+<link rel="stylesheet" href="assets/shell.css?v=107">
 <!-- Aplica el tema guardado antes del paint (evita parpadeo) -->
 <script>try{var t=localStorage.getItem("afta-theme")||"dark";document.documentElement.dataset.theme=t;}catch(e){}</script>
 <!-- Tailwind (Play CDN, sin build). preflight off para no pisar los componentes existentes. -->
@@ -263,6 +263,10 @@ tailwind.config = {
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
         abr 2025 – abr 2026
       </span>
+      <a href="informe.html" class="hidden sm:inline-flex items-center gap-1.5 text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg border border-[var(--line2)] text-[var(--muted)] hover:text-[var(--acc)] hover:border-[var(--acc)]" title="Informe ejecutivo (presentación)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8M8 9h2"/></svg>
+        Informe
+      </a>
       <button id="theme-btn" class="themebtn" onclick="toggleTheme()" title="Tema claro/oscuro" aria-label="Tema">☀</button>
       <a href="https://github.com/romedinag-tech/antofagasta" target="_blank" rel="noopener" class="grid place-items-center w-8 h-8 rounded-lg border border-[var(--line2)] text-[var(--muted)] hover:text-[var(--acc)] hover:border-[var(--acc)]" title="GitHub" aria-label="GitHub">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2A10 10 0 0 0 8.84 21.5c.5.08.66-.22.66-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.1-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.9-1.29 2.74-1.02 2.74-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.16.57.67.48A10 10 0 0 0 12 2Z"/></svg>
@@ -317,7 +321,7 @@ tailwind.config = {
         <!-- MAPA HÉROE (2/3) -->
         <section class="widget xl:col-span-2 flex flex-col">
           <div class="widget-h">
-            <span class="ico ico-png"><img src="assets/brand/ic_bus.png?v=106" alt="" width="22" height="22"></span>
+            <span class="ico ico-png"><img src="assets/brand/ic_bus.png?v=107" alt="" width="22" height="22"></span>
             <div class="min-w-0">
               <h3 id="map-title" class="truncate">Mapa del sistema</h3>
               <span class="sub">recorrido oficial · velocidad map-matched · paraderos</span>
@@ -386,7 +390,7 @@ tailwind.config = {
 
           <section class="widget">
             <div class="widget-h">
-              <span class="ico ico-png"><img src="assets/brand/ic_gauge.png?v=106" alt="" width="22" height="22"></span>
+              <span class="ico ico-png"><img src="assets/brand/ic_gauge.png?v=107" alt="" width="22" height="22"></span>
               <div><h3>Flota y velocidad</h3><span class="sub">por hora · días laborables</span></div>
             </div>
             <div class="widget-b"><div id="ch-hora" style="height:280px"></div><p id="hora-narr" class="wnarr"></p></div>
@@ -419,7 +423,7 @@ tailwind.config = {
       <!-- Cumplimiento de frecuencia -->
       <section class="widget">
         <div class="widget-h">
-          <span class="ico ico-png"><img src="assets/brand/ic_shieldcheck.png?v=106" alt="" width="22" height="22"></span>
+          <span class="ico ico-png"><img src="assets/brand/ic_shieldcheck.png?v=107" alt="" width="22" height="22"></span>
           <div><h3>Cumplimiento de frecuencia</h3><span class="sub">programado (GTFS) vs observado (GPS)</span></div>
         </div>
         <div class="widget-b"><div id="cump-box"></div><p id="cump-narr" class="wnarr"></p></div>
@@ -428,7 +432,7 @@ tailwind.config = {
       <!-- Cumplimiento semanal por variable (solo con línea elegida) -->
       <section class="widget cump-sem" id="cump-sem-card" style="display:none">
         <div class="widget-h">
-          <span class="ico ico-png"><img src="assets/brand/ic_shield.png?v=106" alt="" width="22" height="22"></span>
+          <span class="ico ico-png"><img src="assets/brand/ic_shield.png?v=107" alt="" width="22" height="22"></span>
           <div class="min-w-0"><h3>Cumplimiento semanal por variable exigida</h3><span class="sub">evolución semana a semana</span></div>
           <div class="cs-controls ml-auto">
             <div class="seg" id="cs-dia"></div>
@@ -557,7 +561,7 @@ tailwind.config = {
      style="position:fixed;right:8px;bottom:6px;z-index:1200;font:500 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim,#64748b);background:rgba(10,15,28,.55);border:1px solid var(--line,#1e293b);border-radius:6px;padding:3px 7px;backdrop-filter:blur(6px);pointer-events:none;opacity:.78">act. —</div>
 
 <script src="assets/echarts.min.js"></script>
-<script src="assets/app_shell.js?v=106"></script>
+<script src="assets/app_shell.js?v=107"></script>
 <script>
   /* Sidebar colapsable + recálculo de mapa/charts al cambiar el ancho */
   (function(){
