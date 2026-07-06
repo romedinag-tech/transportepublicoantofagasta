@@ -142,10 +142,8 @@
   300 m</b> del trazado, y su intensidad como <b>hogares por kilómetro</b> de recorrido. A continuación, la cobertura
   se reporta <b>para cada variante</b>, no solo para la línea base.</p>
 
-  <div class="grid2">
-    <div class="card"><h4>Intensidad de cobertura por línea</h4><div class="cap">Hogares dentro de 300 m, por km de trazado (recorrido base)</div><div id="ch-hogkm" class="chart"></div></div>
-    <div class="card"><h4>Cobertura por nivel socioeconómico</h4><div class="cap">Hogares en buffer 300 m · terciles por escolaridad (Censo 2024)</div><div id="ch-nse" class="chart"></div></div>
-  </div>
+  <div class="card"><h4>Intensidad de cobertura por línea y variante</h4><div class="cap">Hogares dentro de 300 m, por km de trazado · los 30 recorridos, agrupados por línea</div><div id="ch-hogkm" class="chart" style="height:680px"></div></div>
+  <div class="card" style="margin-top:26px"><h4>Cobertura por nivel socioeconómico (línea y variante)</h4><div class="cap">Hogares en buffer 300 m · % sobre cada segmento · terciles por escolaridad (Censo 2024)</div><div id="ch-nse" class="chart" style="height:720px"></div></div>
 
   <h3>Cobertura territorial por variante</h3>
   <p>Las variantes cambian de forma relevante la cobertura: acortan el trazado (menos hogares alcanzados) o reorientan
@@ -306,19 +304,37 @@ Promise.all([J("territorio.json"), J("cobertura_lineas.json"), J("cumplimiento.j
     <b>${kpi.tc} min</b> y <b>${kpi.dc.toFixed(0)} km</b>. La oferta cumple ~94% del plan en día laboral y cubre el
     territorio con buena intensidad, sirviendo al 45% de los viajes al trabajo de la ciudad.`;
 
-  // ── cobertura hog/km (base) ──
-  const byHK = [...LINEAS].sort((a,b)=>base[a].hog_km-base[b].hog_km);
-  barChart("ch-hogkm", byHK, byHK.map(l=>base[l].hog_km), {unit:"hog/km", color:COL.mar2, fmt:v=>fmt(v)});
-  barChart("ch-hogkm2", byHK, byHK.map(l=>base[l].hog_km), {unit:"hog/km", color:COL.mar, fmt:v=>fmt(v)});
+  // ── cobertura hog/km — TODOS los recorridos (base + variantes), horizontal ──
+  (function(){
+    const recs=CL.lineas.map(r=>r.rec), vals=CL.lineas.map(r=>r.hog_km);
+    const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+    mk("ch-hogkm").setOption({grid:{left:8,right:56,top:8,bottom:8,containLabel:true},
+      tooltip:{trigger:"axis",...TT,valueFormatter:v=>fmt(v)+" hog/km"},
+      xAxis:{type:"value",axisLabel:{color:COL.mut,fontSize:10},axisLine:{show:false},splitLine:{lineStyle:{color:COL.grid}}},
+      yAxis:{type:"category",data:recs,inverse:true,axisLabel:{color:COL.mut,fontSize:9,interval:0},axisLine:{lineStyle:{color:COL.axis}},axisTick:{show:false}},
+      series:[{type:"bar",data:vals,barWidth:"66%",itemStyle:{color:COL.mar2,borderRadius:[0,4,4,0]},
+        label:{show:true,position:"right",color:COL.mut,fontSize:9,formatter:p=>fmt(p.value)},
+        markLine:{silent:true,symbol:"none",lineStyle:{color:COL.cobre,type:"dashed",width:1.2},data:[{xAxis:avg,label:{formatter:"prom "+fmt(avg),color:COL.cobre,fontSize:9}}]}}]});
+  })();
+  // perfil (panel 2): hog/km base en orden numérico fijo
+  barChart("ch-hogkm2", LINEAS, LINEAS.map(l=>base[l].hog_km), {unit:"hog/km", color:COL.mar, fmt:v=>fmt(v)});
 
-  // ── NSE apilado ──
-  (function(){ const c=mk("ch-nse");
-    const S=(k,col,nm)=>({name:nm,type:"bar",stack:"h",data:LINEAS.map(l=>base[l][k]),itemStyle:{color:col},barWidth:"60%"});
-    c.setOption({grid:{...BASE_GRID,top:34},legend:{top:0,textStyle:{color:COL.mut,fontSize:11},itemWidth:12,itemHeight:8},
+  // ── NSE — TODOS los recorridos, horizontal apilado con % sobre cada color ──
+  (function(){
+    const recs=CL.lineas.map(r=>r.rec);
+    const baj=CL.lineas.map(r=>r.hog_baj), med=CL.lineas.map(r=>r.hog_med), alt=CL.lineas.map(r=>r.hog_alt), tot=CL.lineas.map(r=>r.hog);
+    const lbl=arr=>({show:true,position:"inside",color:"#fff",fontSize:8,fontWeight:"bold",
+      formatter:p=>{const f=arr[p.dataIndex]/tot[p.dataIndex]; return f>0.07?Math.round(f*100)+"%":"";}});
+    mk("ch-nse").setOption({grid:{left:8,right:16,top:30,bottom:8,containLabel:true},
+      legend:{top:0,textStyle:{color:COL.mut,fontSize:11},itemWidth:12,itemHeight:8},
       tooltip:{trigger:"axis",...TT,valueFormatter:v=>fmt(v)+" hog"},
-      xAxis:{type:"category",data:LINEAS,...AXIS_X},
-      yAxis:{type:"value",...AXIS_Y,axisLabel:{...AXIS_Y.axisLabel,formatter:v=>(v/1000)+"k"}},
-      series:[S("hog_baj","#c0563f","NSE bajo"),S("hog_med","#c9922b","NSE medio"),S("hog_alt","#2e8b6f","NSE alto")]});
+      xAxis:{type:"value",axisLabel:{color:COL.mut,fontSize:10,formatter:v=>(v/1000)+"k"},axisLine:{show:false},splitLine:{lineStyle:{color:COL.grid}}},
+      yAxis:{type:"category",data:recs,inverse:true,axisLabel:{color:COL.mut,fontSize:9,interval:0},axisLine:{lineStyle:{color:COL.axis}},axisTick:{show:false}},
+      series:[
+        {name:"NSE bajo",type:"bar",stack:"h",data:baj,itemStyle:{color:"#c0563f"},barWidth:"72%",label:lbl(baj)},
+        {name:"NSE medio",type:"bar",stack:"h",data:med,itemStyle:{color:"#c9922b"},label:lbl(med)},
+        {name:"NSE alto",type:"bar",stack:"h",data:alt,itemStyle:{color:"#2e8b6f"},label:lbl(alt)}
+      ]});
   })();
 
   // ── tabla por variante ──
@@ -338,15 +354,11 @@ Promise.all([J("territorio.json"), J("cobertura_lineas.json"), J("cumplimiento.j
     del sistema (1.171 hog/km)— sirve mayoritariamente sectores de NSE alto. Reportar cada variante evita atribuir a
     la línea base una cobertura que, en la práctica, varía según el recorrido efectivamente operado.`;
 
-  // ── 5 histogramas del perfil ──
-  const byExt=[...LINEAS].sort((a,b)=>base[a].ext_km-base[b].ext_km);
-  barChart("ch-ext", byExt, byExt.map(l=>base[l].ext_km), {unit:"km", color:COL.mar2, fmt:v=>v.toFixed(1)});
-  const byVel=[...LINEAS].sort((a,b)=>base[a].vel-base[b].vel);
-  barChart("ch-vel", byVel, byVel.map(l=>base[l].vel), {unit:"km/h", color:COL.mar, fmt:v=>v.toFixed(1)});
-  const byFl=[...LINEAS].sort((a,b)=>(kOf(a).flota_pico||0)-(kOf(b).flota_pico||0));
-  barChart("ch-flota", byFl, byFl.map(l=>Math.round(kOf(l).flota_pico||0)), {unit:"buses", color:COL.mar2, fmt:v=>fmt(v)});
-  const byFq=[...LINEAS].sort((a,b)=>freqPunta(a)-freqPunta(b));
-  barChart("ch-freq", byFq, byFq.map(l=>freqPunta(l)), {unit:"desp/h", color:COL.mar, fmt:v=>fmt(v)});
+  // ── 5 histogramas del perfil (orden numérico fijo, igual que el Word) ──
+  barChart("ch-ext", LINEAS, LINEAS.map(l=>base[l].ext_km), {unit:"km", color:COL.mar2, fmt:v=>v.toFixed(1)});
+  barChart("ch-vel", LINEAS, LINEAS.map(l=>base[l].vel), {unit:"km/h", color:COL.mar, fmt:v=>v.toFixed(1)});
+  barChart("ch-flota", LINEAS, LINEAS.map(l=>Math.round(kOf(l).flota_pico||0)), {unit:"buses", color:COL.mar2, fmt:v=>fmt(v)});
+  barChart("ch-freq", LINEAS, LINEAS.map(l=>freqPunta(l)), {unit:"desp/h", color:COL.mar, fmt:v=>fmt(v)});
 
   // ── frecuencia sistema por hora ──
   (function(){ const c=mk("ch-freqsys"); const HS=CU.horas;
