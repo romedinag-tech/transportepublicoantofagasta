@@ -89,6 +89,7 @@ header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
 .kpi .val{font-family:var(--mono);font-size:32px;font-weight:700;letter-spacing:-.02em;margin-top:14px;line-height:1;color:var(--tx)}
 .kpi .sub{font-size:13.5px;color:var(--dim);margin-top:12px;line-height:1.4}
 .kpi .ic{font-size:18px;opacity:.95;line-height:1}
+.ast{color:#fbbf24;font-weight:700;cursor:help;font-size:.7em;vertical-align:super;margin-left:1px}
 /* Color semántico estricto del VALOR del KPI (estado de salud en 1 segundo) */
 .kpi .val.is-critical{color:var(--danger)}
 .kpi .val.is-warning{color:var(--warn)}

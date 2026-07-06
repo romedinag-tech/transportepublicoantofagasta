@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=102`).then(r=>r.json());
-const BUILD = "afta-v51";
+const J = n => fetch(`data/${n}?v=103`).then(r=>r.json());
+const BUILD = "afta-v52";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -112,6 +112,11 @@ const _lineaBase = rec => { const m=rec.match(/^(\d+)/); return m?m[1]:rec; };
 const empresaDe = ln => { const x=(T.lineas||[]).find(l=>l.linea===ln||l.linea===_lineaBase(ln)); return x?x.empresa:""; };
 const esVariante = ln => ln!=="TODAS" && (T.lineas||[]).some(l=>(l.variantes||[]).includes(ln));
 const _lk = (obj, key) => (obj&&obj[key]) || (obj&&obj[_lineaBase(key)]); // variant→base fallback
+// Marca de muestra pequeña: el valor puede estar distorsionado (típico en variantes de baja frecuencia).
+const LOW_DESP = 30;   // despachos/día programados (por día); bajo esto el cumplimiento es ruidoso
+const LOW_DESP_PER = 8; // despachos programados por período
+const LOW_HDW = 30;    // intervalos de headway; bajo esto el CV de bunching es inestable
+const AST = '<sup class="ast" title="Muestra pequeña: el valor puede estar distorsionado">*</sup>';
 
 /* ---------- menús ---------- */
 const PERIODOS = [["agg","Agregado"],["am","Punta AM"],["md","Mediodía"],["pm","Punta PM"],["off","Fuera punta"],["noche","Noche"]];
@@ -504,7 +509,8 @@ function renderSalidas(){
     } else {
       const sal=sl(S[state.salDia]||[]); const mx=Math.max(...sal), mxi=sal.indexOf(mx);
       const cumpl = totp(state.salDia)>0 ? Math.round(100*tot(state.salDia)/totp(state.salDia)) : null;
-      const cumplTxt = cumpl!==null ? ` · cumplimiento <b>${cumpl}%</b>` : "";
+      const lowSal = totp(state.salDia)>0 && totp(state.salDia) < LOW_DESP;
+      const cumplTxt = cumpl!==null ? ` · cumplimiento <b>${cumpl}%</b>${lowSal?AST+' <span class="hint">(muestra pequeña)</span>':''}` : "";
       nb.innerHTML=`Buses saliendo en bins de ${SALT.bin_min} min · <b>${DEF[state.salDia][0]}</b> (promedio de ${d[state.salDia]||"—"} días). Observado ~<b>${tot(state.salDia)}</b> · programado ~<b>${totp(state.salDia)}</b>${cumplTxt}. Línea punteada = programado GTFS.`;
     }
   }
@@ -1144,19 +1150,21 @@ function renderLineaKpis(){
     const per = state.periodo, dp = d[per]||{};
     const cv = dp.cv, hw = dp.headway, n = dp.n;
     const dAm = (d.am||{}).cv, dMd=(d.md||{}).cv, dPm=(d.pm||{}).cv, dAgg=(d.agg||{}).cv, dNoche=(d.noche||{}).cv;
+    const lowN = x => (x!=null && x < LOW_HDW) ? AST : "";   // marca CV de muestra pequeña
+    const nAm=(d.am||{}).n, nPm=(d.pm||{}).n, nNoche=(d.noche||{}).n;
     const sisCv = BUNCH.sistema && BUNCH.sistema[dia] && BUNCH.sistema[dia][per] && BUNCH.sistema[dia][per].cv;
     const cvLbl = v => v==null?"—":(v<0.5?"Regular":v<0.8?"Medio":"Apelotonado");
     const cvBg = v => v==null?"":`background:hsla(${Math.max(0,Math.min(1,1-(v-0.3)/0.7))*120},75%,45%,.4)`;
     const card = (cls,lab,val,sub,style="")=>`<div class="lk ${cls}" style="${style}"><div class="lab">${lab}</div><div class="val">${val}</div><div class="sub">${sub}</div></div>`;
     el.style.display="grid";
     el.innerHTML = [
-      card("b-tot",`📊 CV headways (${periodoLbl(per)})`, cv!=null?cv.toFixed(2):"—", `${cvLbl(cv)} · ${n||0} intervalos`, cvBg(cv)),
+      card("b-tot",`📊 CV headways (${periodoLbl(per)})`, cv!=null?cv.toFixed(2)+lowN(n):"—", `${cvLbl(cv)} · ${n||0} intervalos`, cvBg(cv)),
       card("b-eff","⏱️ Headway medio", hw!=null?hw.toFixed(1)+" min":"—", `intervalo entre buses (${periodoLbl(per)})`),
       card("b-bajo","Vs. sistema", sisCv!=null?(cv!=null?((cv-sisCv).toFixed(2)):"—"):"—",
         sisCv!=null?`sistema ${sisCv.toFixed(2)} · ${cv!=null && cv<sisCv?"mejor":cv!=null?"peor":"—"}`:"sin referencia"),
-      card("b-med","CV AM punta", dAm!=null?dAm.toFixed(2):"—", cvLbl(dAm), cvBg(dAm)),
-      card("b-alto","CV PM punta", dPm!=null?dPm.toFixed(2):"—", cvLbl(dPm), cvBg(dPm)),
-      card("b-cic","CV Noche", dNoche!=null?dNoche.toFixed(2):"—", cvLbl(dNoche), cvBg(dNoche)),
+      card("b-med","CV AM punta", dAm!=null?dAm.toFixed(2)+lowN(nAm):"—", cvLbl(dAm), cvBg(dAm)),
+      card("b-alto","CV PM punta", dPm!=null?dPm.toFixed(2)+lowN(nPm):"—", cvLbl(dPm), cvBg(dPm)),
+      card("b-cic","CV Noche", dNoche!=null?dNoche.toFixed(2)+lowN(nNoche):"—", cvLbl(dNoche), cvBg(dNoche)),
     ].join("");
     return;
   }
@@ -1615,11 +1623,13 @@ function renderCump(){
   if(state.linea!=="TODAS"){
     const d = _lk(L, state.linea);
     if(!d){ box.innerHTML=`<div class="empty">Sin frecuencia programada (GTFS) para esta línea.</div>`; return; }
+    let anyLow=false;
     const html_dia = ["L","S","D"].map(s=>{
       const c=d.cumpl[s];
+      const low = c!=null && d.prog_dia[s]!=null && d.prog_dia[s] < LOW_DESP; if(low) anyLow=true;
       return `<div class="cump-row"><b style="min-width:78px">${DIAS[s]}</b>
         ${cumpBar(c)}
-        <span class="pct" style="color:${cumpCol(c)};min-width:46px">${c==null?"—":c+"%"}</span>
+        <span class="pct" style="color:${cumpCol(c)};min-width:46px">${c==null?"—":c+"%"}${low?AST:""}</span>
         <span class="hint" style="flex:1;text-align:right">${d.obs_dia[s]} obs / ${d.prog_dia[s]} prog</span></div>`;
     }).join("");
     // Cumplimiento por PERIODO (día laboral): sumar prog/obs en las horas del período
@@ -1629,11 +1639,12 @@ function renderCump(){
       const hrs = PERIODO_H[k]||[]; let prog=0, obs=0;
       hrs.forEach(h=>{ const i=hidx[h]; if(i==null) return; prog+=(d.prog.L[i]||0); obs+=(d.obs.L[i]||0); });
       const c = prog>0 ? Math.round(100*obs/prog*10)/10 : null;
-      return `<div class="cump-row"><b style="min-width:78px">${lab}</b>${cumpBar(c)}<span class="pct" style="color:${cumpCol(c)};min-width:46px">${c==null?"—":c+"%"}</span><span class="hint" style="flex:1;text-align:right">${obs.toFixed(0)} obs / ${prog} prog</span></div>`;
+      const low = c!=null && prog>0 && prog < LOW_DESP_PER; if(low) anyLow=true;
+      return `<div class="cump-row"><b style="min-width:78px">${lab}</b>${cumpBar(c)}<span class="pct" style="color:${cumpCol(c)};min-width:46px">${c==null?"—":c+"%"}${low?AST:""}</span><span class="hint" style="flex:1;text-align:right">${obs.toFixed(0)} obs / ${prog} prog</span></div>`;
     }).join("");
     box.innerHTML = html_dia +
       `<div class="hint" style="margin-top:10px;color:var(--muted)"><b>Por período</b> (día laboral)</div>` + filasPer +
-      `<div class="hint" style="margin-top:8px">Despachos/día observados (GPS) vs programados (GTFS). 100% = línea blanca; &lt;80% = incumplimiento de frecuencia.</div>`;
+      `<div class="hint" style="margin-top:8px">Despachos/día observados (GPS) vs programados (GTFS). 100% = línea blanca; &lt;80% = incumplimiento de frecuencia.${anyLow?` <b class="ast">*</b> muestra pequeña (&lt;${LOW_DESP} despachos/día): el valor puede estar distorsionado.`:""}</div>`;
   } else {
     // en comuna: solo las líneas que operan en ella
     const lineasAmbito = state.comuna==="TODAS" ? null
