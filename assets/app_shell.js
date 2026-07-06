@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=101`).then(r=>r.json());
-const BUILD = "afta-v50";
+const J = n => fetch(`data/${n}?v=102`).then(r=>r.json());
+const BUILD = "afta-v51";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -377,11 +377,19 @@ function fmtDur(min){ // minutos -> "3h 30m" / "45 min"
 function renderKPIs(cell){
   const k = cell.kpi;
   if(!k){ $("kpis2").innerHTML = `<div class="empty">Sin datos para este ámbito.</div>`; return; }
-  const hasFT = k.flota_total!=null;
-  const busVal = hasFT ? fmt(k.flota_total) : fmt(k.flota_pico);
-  const busSub = hasFT ? `${fmt(k.flota_pico)} simultáneos en hora punta` : "promedio simultáneos en hora punta";
+  // Sistema: flota total (buses distintos = tamaño del parque). Línea/variante: flota en punta
+  // (buses simultáneos = requerimiento operacional; el total por variante está inflado por
+  // buses compartidos entre variantes de la misma línea).
+  let busVal, busSub, busLbl;
+  if(state.linea==="TODAS"){
+    busLbl="Flota total"; busVal=fmt(k.flota_total!=null?k.flota_total:k.flota_pico);
+    busSub = k.flota_pico!=null ? `${fmt(k.flota_pico)} en operación simultánea (punta)` : "buses distintos en el mes";
+  } else {
+    busLbl="Flota en punta"; busVal=fmt(k.flota_pico);
+    busSub = k.flota_total!=null ? `${fmt(k.flota_total)} buses distintos en el mes` : "buses simultáneos (punta)";
+  }
   const cards = [
-    kpiCard("Flota total", busVal, busSub, "🚍", "neutral"),
+    kpiCard(busLbl, busVal, busSub, "🚍", "neutral"),
     kpiCard("Velocidad comercial", fmt1(k.vel)+" km/h", "dist/tiempo · incl. paradas", "⚡", semHigh(k.vel,17,13)),
     kpiCard("Tiempo detenido", fmt1(k.pct_det)+" %", "en ruta · excl. terminales", "🛑", semLow(k.pct_det,18,28)),
   ];
@@ -395,7 +403,7 @@ function renderKPIs(cell){
     cards.push(kpiCard("Variantes", nv||"—", nv ? "recorridos de la línea" : "sin variantes registradas", "🧭", "neutral"));
   }
   const dcVal = k.dc;
-  const tcDirect = k.tc;
+  const tcDirect = k.tc;                       // medido por GPS (uniforme base y variante)
   const tcEst = (dcVal && k.vel) ? Math.round(dcVal / k.vel * 60) : null;
   const tcVal = tcDirect != null ? tcDirect : tcEst;
   const tcSub = tcDirect != null ? "ida + regreso · medido GPS" : (tcVal != null ? "ida + regreso · estimado (dist/vel)" : "sin datos");
@@ -1002,7 +1010,7 @@ function renderBunchTable(){
   if(state.mapMode!=="bunch" || state.vista!=="normal" || state.linea!=="TODAS" || !BUNCH||!BUNCH.lineas){ return; }
   // Tabla comparativa por línea × período (día laboral)
   const periodos = BUNCH.periodos || ["am","md","pm","off","noche","agg"];
-  const lineas = Object.keys(BUNCH.lineas).sort((a,b)=>(a[0]>='0'&&a[0]<='9'?+a:1e9)-(b[0]>='0'&&b[0]<='9'?+b:1e9));
+  const lineas = Object.keys(BUNCH.lineas).filter(k=>!esVariante(k)).sort((a,b)=>(a[0]>='0'&&a[0]<='9'?+a:1e9)-(b[0]>='0'&&b[0]<='9'?+b:1e9));
   const cvCell = cv => { if(cv==null) return `<td style="color:var(--dim)">—</td>`;
     const hue = Math.max(0,Math.min(1, 1-(cv-0.3)/0.7))*120;   // 0.3→verde, 1.0+→rojo
     return `<td style="background:hsla(${hue},75%,45%,.45);font-weight:600">${cv.toFixed(2)}</td>`; };
@@ -1111,7 +1119,7 @@ function renderLineaKpis(){
     const det = sd[per];
     const dAm=sd.am, dPm=sd.pm, dNoche=sd.noche, dAgg=sd.agg;
     // sistema = promedio simple sobre líneas (mismo sentido y período)
-    let sis=null; const all=Object.values(DETP.lineas).map(x=>(x[sk]||x.amb||{})[per]).filter(v=>v!=null);
+    let sis=null; const all=Object.keys(DETP.lineas).filter(k=>!esVariante(k)).map(k=>(DETP.lineas[k][sk]||DETP.lineas[k].amb||{})[per]).filter(v=>v!=null);
     if(all.length) sis = +(all.reduce((a,b)=>a+b,0)/all.length).toFixed(1);
     const lbl = v => v==null?"":(v<5?"Bajo":v<15?"Medio":v<25?"Alto":"Muy alto");
     const bg = v => v==null?"":`background:hsla(${Math.max(0,Math.min(1,1-(v-5)/30))*120},75%,45%,.4)`;
@@ -1630,7 +1638,7 @@ function renderCump(){
     // en comuna: solo las líneas que operan en ella
     const lineasAmbito = state.comuna==="TODAS" ? null
       : new Set((T.lineas||[]).map(l=>l.linea).filter(ln=>(T.cells||{})[`${state.comuna}|${ln}`]));
-    const rows = Object.keys(L).filter(ln=>!lineasAmbito||lineasAmbito.has(ln))
+    const rows = Object.keys(L).filter(ln=>!esVariante(ln) && (!lineasAmbito||lineasAmbito.has(ln)))
                   .map(ln=>({ln, c:L[ln].cumpl.L, emp:empresaDe(ln)}))
                   .filter(r=>r.c!=null).sort((a,b)=>a.c-b.c).slice(0,12);
     box.innerHTML = rows.map(r=>`<div class="cump-row" data-l="${r.ln}" style="cursor:pointer">
