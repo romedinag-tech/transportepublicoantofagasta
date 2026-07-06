@@ -4,8 +4,8 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=100`).then(r=>r.json());
-const BUILD = "afta-v49";
+const J = n => fetch(`data/${n}?v=101`).then(r=>r.json());
+const BUILD = "afta-v50";
 
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null;
 let eqChart, nseChart, rankChart, cmpChart, empresasChart, heatChart, recChart, evolChart;
@@ -378,11 +378,10 @@ function renderKPIs(cell){
   const k = cell.kpi;
   if(!k){ $("kpis2").innerHTML = `<div class="empty">Sin datos para este ámbito.</div>`; return; }
   const hasFT = k.flota_total!=null;
-  const busLbl = hasFT ? "Buses que operan" : "Flota en hora punta";
   const busVal = hasFT ? fmt(k.flota_total) : fmt(k.flota_pico);
-  const busSub = hasFT ? `${fmt(k.flota_pico)} en hora punta` : "promedio de buses simultáneos";
+  const busSub = hasFT ? `${fmt(k.flota_pico)} simultáneos en hora punta` : "promedio simultáneos en hora punta";
   const cards = [
-    kpiCard(busLbl, busVal, busSub, "🚍", "neutral"),
+    kpiCard("Flota total", busVal, busSub, "🚍", "neutral"),
     kpiCard("Velocidad comercial", fmt1(k.vel)+" km/h", "dist/tiempo · incl. paradas", "⚡", semHigh(k.vel,17,13)),
     kpiCard("Tiempo detenido", fmt1(k.pct_det)+" %", "en ruta · excl. terminales", "🛑", semLow(k.pct_det,18,28)),
   ];
@@ -395,10 +394,12 @@ function renderKPIs(cell){
     const nv = tl&&tl.variantes ? tl.variantes.length : 0;
     cards.push(kpiCard("Variantes", nv||"—", nv ? "recorridos de la línea" : "sin variantes registradas", "🧭", "neutral"));
   }
-  const _bk = state.linea!=="TODAS" ? ((T.cells||{})["TODAS|"+_lineaBase(state.linea)]||{}).kpi||{} : {};
-  const tcVal = k.tc!=null ? k.tc : _bk.tc;
-  const dcVal = k.dc!=null ? k.dc : _bk.dc;
-  cards.push(kpiCard("Tiempo de ciclo", fmtDur(tcVal), "ida + regreso · en marcha", "⏱️", "neutral"));
+  const dcVal = k.dc;
+  const tcDirect = k.tc;
+  const tcEst = (dcVal && k.vel) ? Math.round(dcVal / k.vel * 60) : null;
+  const tcVal = tcDirect != null ? tcDirect : tcEst;
+  const tcSub = tcDirect != null ? "ida + regreso · medido GPS" : (tcVal != null ? "ida + regreso · estimado (dist/vel)" : "sin datos");
+  cards.push(kpiCard("Tiempo de ciclo", fmtDur(tcVal), tcSub, "⏱️", "neutral"));
   cards.push(kpiCard("Distancia de ciclo", (dcVal!=null?fmt1(dcVal):"—")+" km", "ida + regreso", "📏", "neutral"));
   $("kpis2").innerHTML = cards.join("");
 }
