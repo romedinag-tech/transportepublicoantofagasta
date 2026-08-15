@@ -364,7 +364,7 @@
     <h1 style="font-size:18px;margin-bottom:10px;color:#22d3ee">Centro de Mando · Transporte Antofagasta</h1>
     <p style="font-size:14px;color:#93a1ba;margin-bottom:14px">Este visor requiere JavaScript activado para mostrar los mapas en vivo, los KPIs y los gráficos interactivos sobre los 11 millones de registros GPS del sistema.</p>
     <p style="font-size:13px;color:#64718c">Para ver capturas estáticas y la metodología del proyecto, visita el repositorio:<br>
-      <a href="https://github.com/romedinag-tech/transportepublicoGC" style="color:var(--ref,#6C8FF5)">github.com/romedinag-tech/transportepublicoGC</a>
+      <a href="https://github.com/romedinag-tech/transportepublicoAntofagasta" style="color:var(--ref,#6C8FF5)">github.com/romedinag-tech/transportepublicoAntofagasta</a>
     </p>
   </div>
 </noscript>
@@ -373,8 +373,8 @@
 <div id="hero-splash">
   <canvas id="hero-canvas"></canvas>
   <div class="hero-content">
-    <div class="hero-logo">GC</div>
-    <h1>TRANSPORTE PÚBLICO<br>GRAN CONCEPCIÓN</h1>
+    <div class="hero-logo">AF</div>
+    <h1>TRANSPORTE PÚBLICO<br>ANTOFAGASTA</h1>
     <p>CENTRO DE MANDO · ANALÍTICA GPS</p>
     <div class="hero-load"><span></span></div>
     <div class="hero-skip">toca para entrar</div>
@@ -474,10 +474,9 @@
     </div><!-- /hdr-center -->
 
     <div class="hdr-right">
-    <!-- estado vivo: última actualización del feed GTFS-RT -->
-    <span class="status hidden md:inline-flex" title="Última actualización del feed GTFS-RT">
-      <span class="dot-live"></span>
-      <span>actualizado hace <span id="live-age" class="font-mono text-[var(--tx)]">—</span></span>
+    <!-- ciudad estática (sin feed GTFS-RT): indicador de análisis histórico -->
+    <span class="status hidden md:inline-flex" title="Análisis sobre registros GPS históricos (sin feed en vivo)">
+      <span>análisis histórico · GPS</span>
     </span>
     <!-- Block 1b: pill "buses operando" removida del header (dato redundante con los KPIs) -->
 
@@ -533,9 +532,9 @@
       <div id="infra-sidebar" style="display:none">
         <div class="flex items-center gap-2 px-1 mb-2">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-[var(--dim)]"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>
-          <span id="infra-list-title" class="text-[10.5px] font-semibold tracking-[.12em] text-[var(--dim)] uppercase">Ejes · Corredores</span>
+          <span id="infra-list-title" class="text-[10.5px] font-semibold tracking-[.12em] text-[var(--dim)] uppercase">Ejes con transporte público</span>
         </div>
-        <input class="side-search" id="infra-search" placeholder="Buscar corredor…" autocomplete="off">
+        <input class="side-search" id="infra-search" placeholder="Buscar eje…" autocomplete="off">
         <div id="infra-list-hint" class="text-[10px] text-[var(--dim)] px-1 pt-1 pb-0.5"></div>
         <div id="infra-list"></div>
       </div>
@@ -579,7 +578,7 @@
           <section class="widget xl:col-span-2 flex flex-col">
             <div class="widget-h">
               <span class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg></span>
-              <div class="min-w-0"><h3 id="infra-map-title">Red de corredores</h3><span class="sub" id="infra-map-sub">plan de infraestructura vs operación real de buses</span></div>
+              <div class="min-w-0"><h3 id="infra-map-title">Principales ejes con transporte público</h3><span class="sub" id="infra-map-sub">ejes viales por los que circulan los buses · operación real</span></div>
               <div id="infra-map-modes" class="seg" style="margin-left:auto;flex:none">
                 <b data-mm="tipo" class="on">Tipo</b><b data-mm="vel">Velocidad</b><b data-mm="flujo">Flujo</b>
               </div>
@@ -594,13 +593,13 @@
             <section class="widget flex-1" id="infra-detail-card">
               <div class="widget-h">
                 <span class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18l5-6 4 4 5-9 4 6"/></svg></span>
-                <div class="min-w-0"><h3 id="infra-detail-title">Detalle del corredor</h3><span class="sub" id="infra-detail-sub">elegí un eje a la izquierda</span></div>
+                <div class="min-w-0"><h3 id="infra-detail-title">Detalle del eje</h3><span class="sub" id="infra-detail-sub">elegí un eje a la izquierda</span></div>
               </div>
               <div class="widget-b">
-                <div id="infra-detail-empty" class="sub" style="color:var(--muted);padding:24px 4px;text-align:center;line-height:1.6">Seleccioná un corredor en la lista de la izquierda o en el mapa para ver su <b>curva horaria de buses/h</b>, velocidad y cobertura de infraestructura.</div>
+                <div id="infra-detail-empty" class="sub" style="color:var(--muted);padding:24px 4px;text-align:center;line-height:1.6">Seleccioná un eje en la lista de la izquierda o en el mapa para ver su <b>curva horaria de buses/h</b>, velocidad y cobertura de infraestructura.</div>
                 <div id="infra-chart" style="height:300px;display:none"></div>
                 <div id="infra-vel-wrap" style="display:none">
-                  <div class="sub" style="margin:14px 0 2px;font-weight:600;color:var(--text-mid)">Velocidad operativa del corredor <span style="font-weight:400;font-size:10.5px;color:var(--text-lo)">· física (ventana 1&nbsp;km) · laborable · banda p15–p85</span></div>
+                  <div class="sub" style="margin:14px 0 2px;font-weight:600;color:var(--text-mid)">Velocidad operativa del eje <span style="font-weight:400;font-size:10.5px;color:var(--text-lo)">· física (ventana 1&nbsp;km) · laborable · banda p15–p85</span></div>
                   <div id="infra-chart-vel" style="height:230px"></div>
                 </div>
                 <div id="infra-exc-wrap" style="display:none">
@@ -900,7 +899,7 @@
 
 <!-- F4: defer en ambos (orden de declaración se respeta) → no bloquean parse; leaflet con defer en <head> ya cargó antes -->
 <script defer src="assets/echarts.min.js"></script>
-<script defer src="assets/app_shell.js?v=200"></script>
+<script defer src="assets/app_shell.js?v=201"></script>
 <script>
   /* Sidebar colapsable + recálculo de mapa/charts al cambiar el ancho */
   (function(){

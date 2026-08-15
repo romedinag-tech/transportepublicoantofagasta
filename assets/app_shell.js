@@ -25,7 +25,7 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=200`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=201`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -48,7 +48,7 @@ let VFREQ=null, VTREND=null, curVar=null, lastFitScope=null, TLIN={}, PESP={stop
 let VCICLO=null, vcChart=null, vcPer="agregado", vcSm=7;
 let DETP=null, CLINE={lineas:[]}, BUNCH=null, BUNCHA=null, CICLO=null;
 let _nseTerciles=null;
-let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"live", vista:"normal", periodo:"agg", purpose:"all", coverSub:"est", sentido:"amb", detTipo:"cong", congSub:"prom", freqDia:"L", rankCat:"prud", cmpA:null, cmpB:null, modo:"operacion", infraSub:"realidad", infraDia:"L", infraSel:null};
+let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"conges", vista:"normal", periodo:"agg", purpose:"all", coverSub:"est", sentido:"amb", detTipo:"cong", congSub:"prom", freqDia:"L", rankCat:"prud", cmpA:null, cmpB:null, modo:"operacion", infraSub:"realidad", infraDia:"L", infraSel:null};
 let INFRAE=null, imap=null, infraChart=null, infraLayers=[], FLUJOEJES=null;   // observatorio de infraestructura
 let infraVelChart=null, infraExcChart=null, VELEJE=null;   // velocidad física + excesos por eje (v_1km)
 let EJEDIAG=null, ejeDiagLayers=[];   // diagnóstico: bloques (eslabones) que alimentan cada eje
@@ -57,7 +57,7 @@ const IEFECT="#e879f9";   // capa "ejes efectivos" (corredores reales dibujados 
 const SHOW_EFECTIVOS=false;   // Carrera/PAC ya están en el plan → la capa efectivos quedó redundante; se oculta (reversible)
 let csChart, freqChart, linFreqChart, lineFreqHistChart, rankProgChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = "data/live.json";
-const MAP_MODES = [["live","En vivo"],["cover","Cobertura"],["trans","Transbordo"],["wait","Espera"],["conges","Congestión"],["bunch","Bunching"],["det","Detenciones"],["terms","Terminales"],["exc","Excesos vel."],["salud","Salud"],["edu","Educación"],["nse","NSE"]];
+const MAP_MODES = [["conges","Congestión"],["cover","Cobertura"],["trans","Transbordo"],["wait","Espera"],["bunch","Bunching"],["det","Detenciones"],["terms","Terminales"],["exc","Excesos vel."],["salud","Salud"],["edu","Educación"],["nse","NSE"]];
 const PEAK_H = [7,8,9,17,18,19];
 const PERIODOS = [["agg","Agregado"],["am","Punta AM"],["md","Mediodía"],["pm","Punta PM"],["off","Fuera punta"],["noche","Noche"]];
 const PERIODO_H = {agg:[6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22], am:[7,8,9], md:[12,13,14], pm:[17,18,19], off:[10,11,15,16,20,21,22], noche:[21,22,23]};
@@ -126,9 +126,13 @@ const purposeLbl = p => (PURPOSES.find(x=>x[0]===p)||["","Todos"])[1];
 
 function buildComunaTabs(){
   const order = (GEO.features||[]).map(f=>f.properties.name);
-  let html = `<span class="ctab" data-c="TODAS" data-v="normal">Antofagasta</span>`;
-  order.forEach(c=> html += `<span class="ctab" data-c="${c}" data-v="normal">${c}</span>`);
-  html += `<span class="vsep"></span><span class="ctab special" data-v="ranking">▦ Ranking</span><span class="ctab special" data-v="comparador">⇄ Comparador</span>`;
+  const multi = order.length > 1;   // multicomuna (GCCP): tabs por comuna + ranking/comparador. Una sola comuna (Antofagasta): solo el sistema.
+  const cityName = order.length===1 ? order[0] : "Antofagasta";
+  let html = `<span class="ctab" data-c="TODAS" data-v="normal">${cityName}</span>`;
+  if(multi){
+    order.forEach(c=> html += `<span class="ctab" data-c="${c}" data-v="normal">${c}</span>`);
+    html += `<span class="vsep"></span><span class="ctab special" data-v="ranking">▦ Ranking</span><span class="ctab special" data-v="comparador">⇄ Comparador</span>`;
+  }
   $("comuna-tabs").innerHTML = html;
   $("comuna-tabs").querySelectorAll(".ctab").forEach(el=>{
     el.onclick = ()=>{ const v=el.dataset.v;
@@ -263,9 +267,11 @@ function render(){
   // título de ámbito
   let title, sub;
   const emp = state.linea!=="TODAS" ? empresaDe(state.linea) : "";
-  if(state.linea==="TODAS" && state.comuna==="TODAS"){ title="Antofagasta"; sub="36 líneas · 12 comunas"; }
+  const _nl=(T.lineas||[]).length, _nc=(T.comunas||[]).length;
+  const _cityName=_nc===1 ? (T.comunas[0]||"Antofagasta") : "Antofagasta";
+  if(state.linea==="TODAS" && state.comuna==="TODAS"){ title=_cityName; sub=`${_nl} líneas · ${_nc} comuna${_nc>1?"s":""}`; }
   else if(state.linea==="TODAS"){ title=state.comuna; sub="todas las líneas que operan aquí"; }
-  else if(state.comuna==="TODAS"){ title=`Línea ${state.linea} · ${emp}`; sub="en todo el Antofagasta"; }
+  else if(state.comuna==="TODAS"){ title=`Línea ${state.linea} · ${emp}`; sub=_nc>1?"en todo el sistema":`en ${_cityName}`; }
   else { title=`Línea ${state.linea} · ${emp}`; sub=`en ${state.comuna}`; }
   $("scope-title").textContent = title;
   $("scope-sub").textContent = sub;
@@ -1240,10 +1246,10 @@ function renderInfraFlujo(sub){
     ? `<span style="font-size:12px;color:var(--muted)">Color = severidad (flujo × déficit de infra × lentitud) · grosor = flujo</span>`
     : [[">=200","#fb7185"],["100–199","#f5a524"],["40–99","#22d3ee"],["<40","#64748b"]].map(([l,c])=>`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><i class="ic-dot" style="background:${c}"></i>${l} b/h</span>`).join("");
   $("infra-narr").innerHTML= sub==="brechas"
-    ? `<b>Brechas</b>: ${C.length} corredores con operación intensa y baja cobertura de infraestructura exclusiva — prioridades de inversión. Clic para ver su perfil horario.`
-    : `<b>Operación real</b> (histórico, ${DL2(dia)}): flujo de buses/hora por corredor. Color/grosor = pico de flujo. Clic para ver la curva.`;
-  $("infra-list-title").textContent= sub==="brechas"?"Brechas (prioridades)":"Corredores por flujo";
-  $("infra-list-hint").textContent=`${C.length} corredores · ${DL2(dia)}`;
+    ? `<b>Brechas</b>: ${C.length} ejes con operación intensa y baja cobertura de infraestructura exclusiva — prioridades de inversión. Clic para ver su perfil horario.`
+    : `<b>Operación real</b> (histórico, ${DL2(dia)}): flujo de buses/hora por eje. Color/grosor = pico de flujo. Clic para ver la curva.`;
+  $("infra-list-title").textContent= sub==="brechas"?"Brechas (prioridades)":"Ejes por flujo";
+  $("infra-list-hint").textContent=`${C.length} ejes · ${DL2(dia)}`;
   $("infra-list").innerHTML=C.map(c=>{ const col=sub==="brechas"?ibrechaCol(c.brecha):iflowCol(c._pico);
     return `<div class="icard${selNm===c.nm?" sel":""}" onclick="__isel('cor','${encodeURIComponent(c.nm).replace(/'/g,'%27')}')"><span class="nm"><span class="ic-dot" style="background:${col};margin-right:6px"></span>${c.nm}</span><span class="mt">${Math.round(c._pico)} b/h${sub==="brechas"?` · ${Math.round(c.cov*100)}%`:""}</span></div>`; }).join("");
 }
