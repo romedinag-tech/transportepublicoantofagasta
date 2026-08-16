@@ -25,7 +25,7 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=202`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=203`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -1321,6 +1321,9 @@ function _renderInfraExc(ejeName){
 // Ventana física corta (~400 m): revela DÓNDE cae la velocidad (cuellos) a lo largo del eje, no solo el promedio.
 const _PERF_PER=[["pam","Punta AM","#f5a524"],["mediodia","Mediodía","#22d3ee"],["ppm","Punta PM","#fb7185"],["fuera","Fuera punta","#94a3b8"]];
 function _perfN(sd){ let n=0; for(const p in sd) (sd[p]||[]).forEach(r=>n+=r[4]||0); return n; }
+// suaviza el ruido bin-a-bin del perfil (media móvil ponderada 1-2-1, respeta huecos y conserva los cuellos)
+function _smooth(a){ return a.map((v,i)=>{ if(v==null) return null; const l=a[i-1],r=a[i+1];
+  let s=2*v,w=2; if(l!=null){s+=l;w++;} if(r!=null){s+=r;w++;} return Math.round(s/w*10)/10; }); }
 function _renderInfraPerfil(ejeName){
   const wrap=$("infra-perfil-wrap"), ve=VELEJE&&VELEJE.ejes&&VELEJE.ejes[ejeName], pf=ve&&ve.perfil;
   if(!wrap) return;
@@ -1343,7 +1346,7 @@ function _renderInfraPerfil(ejeName){
   const xs=[...kmset].sort((a,b)=>a-b), th=TH();
   const series=_PERF_PER.map(([p,nm,col])=>{
     const m={}; (sd[p]||[]).forEach(r=>m[r[0]]=r[1]);
-    const data=xs.map(k=>m[k]!=null?m[k]:null);
+    const data=_smooth(xs.map(k=>m[k]!=null?m[k]:null));
     return data.some(v=>v!=null) ? {name:nm,type:"line",smooth:true,symbol:"none",connectNulls:true,data,
       lineStyle:{width:(p==="ppm"||p==="pam")?2.6:1.8,color:col},itemStyle:{color:col}} : null;
   }).filter(Boolean);
