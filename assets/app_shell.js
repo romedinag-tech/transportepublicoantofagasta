@@ -25,7 +25,7 @@ const fmt = n => NF.format(Math.round(n||0));
 const fmt1 = n => NF.format(Math.round((n||0)*10)/10);
 const HORAS = [...Array(24).keys()].map(h=>String(h).padStart(2,"0")+"h");
 const $ = id => document.getElementById(id);
-const J = n => fetch(`data/${n}?v=201`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=202`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -48,9 +48,9 @@ let VFREQ=null, VTREND=null, curVar=null, lastFitScope=null, TLIN={}, PESP={stop
 let VCICLO=null, vcChart=null, vcPer="agregado", vcSm=7;
 let DETP=null, CLINE={lineas:[]}, BUNCH=null, BUNCHA=null, CICLO=null;
 let _nseTerciles=null;
-let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"conges", vista:"normal", periodo:"agg", purpose:"all", coverSub:"est", sentido:"amb", detTipo:"cong", congSub:"prom", freqDia:"L", rankCat:"prud", cmpA:null, cmpB:null, modo:"operacion", infraSub:"realidad", infraDia:"L", infraSel:null};
+let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:"conges", vista:"normal", periodo:"agg", purpose:"all", coverSub:"est", sentido:"amb", detTipo:"cong", congSub:"prom", freqDia:"L", rankCat:"prud", cmpA:null, cmpB:null, modo:"operacion", infraSub:"realidad", infraDia:"L", infraSel:null, perfilSent:null};
 let INFRAE=null, imap=null, infraChart=null, infraLayers=[], FLUJOEJES=null;   // observatorio de infraestructura
-let infraVelChart=null, infraExcChart=null, VELEJE=null;   // velocidad física + excesos por eje (v_1km)
+let infraVelChart=null, infraExcChart=null, infraPerfilChart=null, VELEJE=null;   // velocidad física + excesos + perfil territorial por eje (v_1km)
 let EJEDIAG=null, ejeDiagLayers=[];   // diagnóstico: bloques (eslabones) que alimentan cada eje
 const ITIPO={"Corredor":"#ec4899","Pista Solo Bus":"#f5a524","Vía Exclusiva":"#34d399","Mixto":"#94a3b8","—":"#64748b"};
 const IEFECT="#e879f9";   // capa "ejes efectivos" (corredores reales dibujados a mano) — color propio
@@ -1317,6 +1317,48 @@ function _renderInfraExc(ejeName){
     series},true);
   setTimeout(()=>{if(infraExcChart)infraExcChart.resize();},60);
 }
+// #4 — VELOCIDAD A LO LARGO DEL EJE: perfil territorial (X = km desde el extremo km0) por período del día.
+// Ventana física corta (~400 m): revela DÓNDE cae la velocidad (cuellos) a lo largo del eje, no solo el promedio.
+const _PERF_PER=[["pam","Punta AM","#f5a524"],["mediodia","Mediodía","#22d3ee"],["ppm","Punta PM","#fb7185"],["fuera","Fuera punta","#94a3b8"]];
+function _perfN(sd){ let n=0; for(const p in sd) (sd[p]||[]).forEach(r=>n+=r[4]||0); return n; }
+function _renderInfraPerfil(ejeName){
+  const wrap=$("infra-perfil-wrap"), ve=VELEJE&&VELEJE.ejes&&VELEJE.ejes[ejeName], pf=ve&&ve.perfil;
+  if(!wrap) return;
+  const sents = pf&&pf.sent ? Object.keys(pf.sent).filter(k=>pf.sent[k]&&Object.keys(pf.sent[k]).length) : [];
+  if(!sents.length){ wrap.style.display="none"; return; }
+  wrap.style.display="";
+  const lbl=ve.lbl||["sentido +","sentido −"];
+  const sentName=k=>k==="s1"?(lbl[0]||"sentido +"):(lbl[1]||"sentido −");
+  if(!state.perfilSent || !sents.includes(state.perfilSent))
+    state.perfilSent = sents.slice().sort((a,b)=>_perfN(pf.sent[b])-_perfN(pf.sent[a]))[0];
+  const sk=state.perfilSent, sd=pf.sent[sk];
+  // toggle de sentido (misma dirección que las flechas del flujo)
+  $("infra-perfil-sent").innerHTML = sents.map(k=>`<b data-ps="${k}" class="${k===sk?'on':''}">${sentName(k)}</b>`).join("");
+  $("infra-perfil-sent").querySelectorAll("[data-ps]").forEach(el=>el.onclick=()=>{ state.perfilSent=el.dataset.ps; _renderInfraPerfil(ejeName); });
+  // referencia del km 0 (orientación del eje)
+  const card=pf.ref0&&pf.ref0.card, len=pf.len_km;
+  $("infra-perfil-ref").innerHTML = `<b>km 0</b> = extremo <b>${card||"—"}</b>${len!=null?` · eje de <b>${len} km</b>`:""} · el sentido “${sentName(sk)}” avanza ${sk==="s1"?"según":"contra"} el kilometraje`;
+  // eje X = unión ordenada de km de los períodos mostrados
+  const kmset=new Set(); _PERF_PER.forEach(([p])=>{ (sd[p]||[]).forEach(r=>kmset.add(r[0])); });
+  const xs=[...kmset].sort((a,b)=>a-b), th=TH();
+  const series=_PERF_PER.map(([p,nm,col])=>{
+    const m={}; (sd[p]||[]).forEach(r=>m[r[0]]=r[1]);
+    const data=xs.map(k=>m[k]!=null?m[k]:null);
+    return data.some(v=>v!=null) ? {name:nm,type:"line",smooth:true,symbol:"none",connectNulls:true,data,
+      lineStyle:{width:(p==="ppm"||p==="pam")?2.6:1.8,color:col},itemStyle:{color:col}} : null;
+  }).filter(Boolean);
+  if(!infraPerfilChart) infraPerfilChart=echarts.init($("infra-chart-perfil"));
+  infraPerfilChart.setOption({textStyle:{fontFamily:th.font,color:th.tx},grid:{left:8,right:14,top:28,bottom:36,containLabel:true},
+    legend:{data:series.map(s=>s.name),textStyle:{color:th.mut,fontSize:10},top:0},
+    tooltip:{trigger:"axis",backgroundColor:th.tip,borderColor:th.tipB,textStyle:{color:th.tx},
+      formatter:p=>{ if(!p||!p.length) return ""; let s=`km ${p[0].axisValue}`;
+        p.forEach(z=>{ if(z.value!=null) s+=`<br>${z.marker}${z.seriesName}: <b>${Math.round(z.value)}</b> km/h`; }); return s; }},
+    xAxis:{type:"category",data:xs.map(k=>k.toFixed(1)),name:"km desde el extremo "+(card||"km0"),nameLocation:"middle",nameGap:22,
+      nameTextStyle:{color:th.mut,fontSize:10},axisLabel:{color:th.mut,fontSize:9},axisLine:{lineStyle:{color:th.axis}}},
+    yAxis:{type:"value",name:"km/h",nameTextStyle:{color:th.mut,fontSize:10},axisLabel:{color:th.mut},splitLine:{lineStyle:{color:th.grid}}},
+    series},true);
+  setTimeout(()=>{if(infraPerfilChart)infraPerfilChart.resize();},60);
+}
 function renderInfraDetail(sel){
   const empty=$("infra-detail-empty"), chartEl=$("infra-chart");
   if(empty && !empty.dataset.def) empty.dataset.def=empty.innerHTML;
@@ -1362,6 +1404,7 @@ function renderInfraDetail(sel){
       $("infra-detail-narr").innerHTML="";
     }
     _renderInfraVel(sel.name);
+    _renderInfraPerfil(sel.name);
     _renderInfraExc(sel.name);
     return;
   }

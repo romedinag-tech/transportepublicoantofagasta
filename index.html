@@ -602,6 +602,14 @@
                   <div class="sub" style="margin:14px 0 2px;font-weight:600;color:var(--text-mid)">Velocidad operativa del eje <span style="font-weight:400;font-size:10.5px;color:var(--text-lo)">· física (ventana 1&nbsp;km) · laborable · banda p15–p85</span></div>
                   <div id="infra-chart-vel" style="height:230px"></div>
                 </div>
+                <div id="infra-perfil-wrap" style="display:none">
+                  <div class="sub" style="margin:14px 0 2px;font-weight:600;color:var(--text-mid);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span>Velocidad a lo largo del eje <span style="font-weight:400;font-size:10.5px;color:var(--text-lo)">· física (ventana 400&nbsp;m) · laborable · por período del día</span></span>
+                    <span id="infra-perfil-sent" class="seg" style="margin-left:auto;flex:none"></span>
+                  </div>
+                  <div id="infra-perfil-ref" class="sub" style="font-size:10.5px;color:var(--text-lo);margin-bottom:2px"></div>
+                  <div id="infra-chart-perfil" style="height:250px"></div>
+                </div>
                 <div id="infra-exc-wrap" style="display:none">
                   <div class="sub" style="margin:14px 0 2px;font-weight:600;color:var(--text-mid)">Excesos de velocidad sostenidos <span style="font-weight:400;font-size:10.5px;color:var(--text-lo)">· por línea y mes · física (&gt;70 km/h en 1&nbsp;km)</span></div>
                   <div id="infra-chart-exc" style="height:230px"></div>
@@ -899,7 +907,7 @@
 
 <!-- F4: defer en ambos (orden de declaración se respeta) → no bloquean parse; leaflet con defer en <head> ya cargó antes -->
 <script defer src="assets/echarts.min.js"></script>
-<script defer src="assets/app_shell.js?v=201"></script>
+<script defer src="assets/app_shell.js?v=202"></script>
 <script>
   /* Sidebar colapsable + recálculo de mapa/charts al cambiar el ancho */
   (function(){
