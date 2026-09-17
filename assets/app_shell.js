@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=240`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=241`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -444,6 +444,7 @@ function buildLineaList(filter=""){
 
 /* ---------- render ---------- */
 function render(){
+  try{ setHdrVentana(); }catch(e){}   // el período del dato en el encabezado (ciudad estática)
   // ETAPA 2: por defecto NO estamos en la vista de línea compuesta (oferta+demanda apiladas); el hook al
   // final del bloque de operación la reactiva si corresponde. Esto limpia el estado al cambiar de modo/vista
   // (p.ej. al entrar al modo demanda independiente, donde el ranking de líneas SÍ debe verse).
@@ -857,8 +858,11 @@ function _mesAnio(iso){
   const m = String(iso||"").match(/^(\d{4})-(\d{2})/);
   return m ? `${_MESES[+m[2]-1]}-${m[1]}` : null;
 }
+let _hdrVentanaOk=false;
 function setHdrVentana(){
+  if(_hdrVentanaOk) return;
   const el = $("hdr-ventana"); if(!el || typeof T==="undefined" || !T) return;
+  _hdrVentanaOk=true;
   const a = _mesAnio(T.desde), b = _mesAnio(T.hasta);
   if(!a && !b) return;
   el.textContent = (a===b || !b) ? a : `${a} a ${b}`;
