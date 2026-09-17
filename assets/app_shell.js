@@ -1,4 +1,5 @@
-/* Visor Transporte Antofagasta — navegación por comuna (territorio) y línea (operador) */
+/* Shell ÚNICO y city-agnóstico del tablero de transporte público — navegación por comuna (territorio) y
+   línea (operador). Todo lo propio de la ciudad entra por window.CITY (config.js) y por data/. */
 const IC={
   bus:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="14" rx="3"/><path d="M6 10h12"/><circle cx="9" cy="20" r="1"/><circle cx="15" cy="20" r="1"/><path d="M6 17v4M18 17v4"/></svg>',
   zap:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
@@ -32,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=226`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=227`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -59,8 +60,10 @@ let state = {comuna:"TODAS", linea:"TODAS", csDia:"L", csVar:"freq", mapMode:(CI
 let INFRAE=null, imap=null, infraChart=null, infraLayers=[], FLUJOEJES=null;   // observatorio de infraestructura
 let infraVelChart=null, infraExcChart=null, infraPerfilChart=null, VELEJE=null;   // velocidad física + excesos + perfil territorial por eje (v_1km)
 let EJEDIAG=null, ejeDiagLayers=[];   // diagnóstico: bloques (eslabones) que alimentan cada eje
-const ITIPO={"Corredor":"#ec4899","Pista Solo Bus":"#f5a524","Vía Exclusiva":"#34d399","Mixto":"#94a3b8","—":"#64748b"};
-const IEFECT="#e879f9";   // capa "ejes efectivos" (corredores reales dibujados a mano) — color propio
+/* lee un token CSS del tema activo (definido temprano para que la paleta de abajo lo use) */
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const ITIPO={"Corredor":cssv("--infra-corredor"),"Pista Solo Bus":cssv("--infra-pistabus"),"Vía Exclusiva":cssv("--infra-exclusiva"),"Mixto":cssv("--infra-mixto"),"—":cssv("--infra-none")};
+const IEFECT=cssv("--infra-efectivo");   // capa "ejes efectivos" (corredores reales dibujados a mano) — color propio
 const SHOW_EFECTIVOS=false;   // Carrera/PAC ya están en el plan → la capa efectivos quedó redundante; se oculta (reversible)
 let csChart, freqChart, linFreqChart, lineFreqHistChart, rankProgChart, lmap, baseLayers, routeLayer, comunaLayer, stopLayer, liveLayer, liveCanvas, coverLayer, coverCanvas, speedLegend, coverLegend;
 const LIVE_URL = _liveUrl("live.json");
@@ -80,7 +83,7 @@ const periodoLbl = p => (PERIODOS.find(x=>x[0]===p)||["","Agregado"])[1];
 const SENTIDOS = [["amb","Ambos"],["0","Ida"],["1","Regreso"]];
 const DET_TIPOS = [["cong","Congestión"],["par","Paraderos"]];
 const CONG_SUBS = [["prom","Promedio"],["crit","Día crítico"],["estab","Estabilidad"]];
-const nseColors = {0:"#fb923c", 1:"#94a3b8", 2:"#2dd4bf"};
+const nseColors = {0:cssv("--nse-bajo"), 1:cssv("--nse-medio"), 2:cssv("--nse-alto")};
 const nseLabel = n => n===0?"NSE bajo":n===1?"NSE medio":n===2?"NSE alto":"sin dato NSE";
 
 const CS_DIAS = [["L","Laboral"],["S","Sábado"],["D","Domingo"]];
@@ -93,26 +96,113 @@ const CS_VARS = [
 
 /* velocidad -> color rojo→amarillo→verde (8..28 km/h) */
 function speedColor(v){
-  if(v==null) return "#64748b";
+  if(v==null) return cssv("--infra-none");
   const t = Math.max(0, Math.min(1, (v-8)/20));   // 8 km/h rojo, 28 verde
   const hue = t*120;                               // 0=rojo 60=amarillo 120=verde
   return `hsl(${hue},72%,50%)`;
 }
 
-/* tema (claro/oscuro): lee variables CSS para que los charts ECharts sigan el tema */
-const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+/* tema (claro/oscuro): TH() para que los charts ECharts sigan el tema (cssv se define arriba) */
 const TH = () => ({tx:cssv("--tx"), mut:cssv("--muted"), axis:cssv("--ch-axis"), grid:cssv("--ch-grid"), tip:cssv("--ch-tip"), tipB:cssv("--line2"), font:cssv("--font-ui")||"IBM Plex Sans,system-ui,sans-serif"});
+// Clave de tema por-RUTA: los sitios de GitHub Pages comparten origen (romedinag-tech.github.io) → una clave
+// única "gccp-theme" filtraba el tema de un dashboard (p.ej. la cara PULSO del lab) a los demás (GCCP prod).
+// Con la ruta en la clave, cada tablero persiste su tema por separado.
+const THEME_KEY = "tp-theme:"+((typeof location!=="undefined" && location.pathname.split('/')[1])||'root');
 function applyTheme(t){
   document.documentElement.dataset.theme = t;
-  try{ localStorage.setItem("gccp-theme", t); }catch(e){}
-  const btn=$("theme-btn"); if(btn) btn.textContent = t==="light" ? "☾" : "☀";
+  try{ localStorage.setItem(THEME_KEY, t); }catch(e){}
+  const btn=$("theme-btn"); if(btn) btn.textContent = (t==="light"||/-light$/.test(t)||t==="gore") ? "☾" : "☀";
 }
 function toggleTheme(){
-  applyTheme(document.documentElement.dataset.theme==="light" ? "dark" : "light");
+  const t=document.documentElement.dataset.theme||"";
+  // Cara GORE: alternar claro (gore) ↔ oscuro ámbar (gore-dark) SIN recargar — es el layout ORIGINAL (no
+  // cliente → no hay re-layout que reconstruir); render() re-colorea los charts con los tokens nuevos.
+  if(/^gore/.test(t)){ applyTheme(t==="gore-dark"?"gore":"gore-dark"); if(typeof render==="function") render(); return; }
+  // Cara de cliente: alternar entre la variante oscura y su gemela "-light" RECARGANDO. El re-layout
+  // (nav/acordeones/.view-content) y ECharts/Leaflet cachean estado al construirse; un reload reconstruye
+  // TODO limpio en el tema nuevo (la head-init honra la variante cliente-* persistida en localStorage).
+  if(/^cliente/.test(t)){
+    const nx = t.endsWith("-light") ? t.replace(/-light$/,"") : t+"-light";
+    try{ localStorage.setItem(THEME_KEY, nx); }catch(e){}
+    location.reload(); return;
+  }
+  applyTheme(t==="light" ? "dark" : "light");
   if(typeof render==="function") render();   // redibuja charts con los colores nuevos
 }
 
 const cellOf = () => (T.cells[`${state.comuna}|${state.linea}`] || {kpi:null, horas:[]});
+
+/* ═══ UNIDAD DEL PADRÓN DE LA CAPA DE MANZANAS: `hog` con fallback a `n` ═══════════════════════════
+   Dos generadores distintos alimentan cobertura.json y NO escriben el mismo campo:
+     · cobertura RICA (censo + catastro SII; hoy solo GCCP) → `hog` = HOGARES por manzana.
+     · cobertura PORTABLE (kpi_cobertura_censo.py, ciudades sin SII) → `n` = PERSONAS (n_per del Censo);
+       `hog` puede venir ausente, o en CERO cuando la fuente no publica n_hog (el script hace
+       `int(round(n_hog or 0))`, así que un NULL aguas arriba llega como 0, no como ausente).
+   Leer `p.hog` a secas dejaba la ciudad en 0/—/null. Medido en Antofagasta: Σhog = 0 contra
+   Σn = 388.478 en 3.260 manzanas (0 manzanas con hog>0); Temuco 3.876/3.878 con hog>0.
+
+   DOS REGLAS que importan:
+   1) La decisión es por CAPA, UNA sola vez — no por manzana. Mezclar hogares en unas y personas en
+      otras daría un total sin significado. Por eso `hog` se acepta solo si la capa TIENE hogares
+      utilizables (algún valor finito > 0); si no, toda la capa se lee por `n`.
+   2) El RÓTULO sigue al campo efectivamente usado. Si se están contando personas, no se dice
+      "hogares": no existe conversión población→hogares y no se inventa ninguna.
+   `cobertura_din_lineas.json` (DINL) se deriva de esta MISMA capa con el mismo campo — verificado
+   midiendo: DINL.lineas["102"].hog = 168.579 = Σn exacta de las manzanas de la 102 en Antofagasta, y
+   DINL.lineas["1"].hog = 45.301 = Σhog exacta en Temuco. Por eso su rótulo usa este mismo flag. */
+let _COB_UNIT = null;
+const _COB_UNIT_HOG = {campo:"hog", esHog:true,  plural:"hogares",    Cap:"Hogares",    corto:"hog"};
+const _COB_UNIT_POB = {campo:"n",   esHog:false, plural:"habitantes", Cap:"Habitantes", corto:"hab"};
+function cobUnit(){
+  if(_COB_UNIT) return _COB_UNIT;
+  const fs = (COB && COB.features) || null;
+  if(!fs || !fs.length) return _COB_UNIT_HOG;            // aún sin cargar: no se cachea (se re-evalúa)
+  const hayHog = fs.some(f => { const v = f.properties && f.properties.hog;
+                                return typeof v === "number" && isFinite(v) && v > 0; });
+  return (_COB_UNIT = hayHog ? _COB_UNIT_HOG : _COB_UNIT_POB);
+}
+/* valor del padrón de UNA manzana, ya resuelto al campo de la capa (con `n` como último recurso) */
+function mzHog(p){
+  if(!p) return 0;
+  const v = p[cobUnit().campo];
+  if(typeof v === "number" && isFinite(v)) return v;
+  return (typeof p.n === "number" && isFinite(p.n)) ? p.n : 0;
+}
+const HOGL = () => cobUnit().plural;   // "hogares" | "habitantes"
+const HOGC = () => cobUnit().Cap;      // "Hogares" | "Habitantes"
+const HOGS = () => cobUnit().corto;    // "hog"     | "hab"
+/* ¿la capa trae avalúo (NSE) en alguna manzana? Sin SII viene null en TODAS (Antofagasta: 3.260/3.260),
+   y entonces los desgloses por tercil deben decir "sin dato", no afirmar un 0 medido. */
+let _COB_HAS_NSE = null;
+function cobHasNSE(){
+  if(_COB_HAS_NSE !== null) return _COB_HAS_NSE;
+  const fs = (COB && COB.features) || null;
+  if(!fs || !fs.length) return false;                    // sin cargar: no se cachea
+  return (_COB_HAS_NSE = fs.some(f => { const v = f.properties && f.properties.nse;
+                                        return typeof v === "number" && isFinite(v) && v > 0; }));
+}
+/* % del padrón a ≤300 m de la red. Lo normal es leerlo de `resumen.cob_est.pct_hogares_cubiertos`, pero
+   la cobertura portable lo deja en null (Antofagasta) y el resumen quedaba en "—".
+   Se reconstruye ponderando el `cob_est` de cada manzana (% de la manzana a ≤300 m) por su padrón:
+        pct = Σ(padrón_i × cob_est_i/100) / Σ padrón_i
+   VALIDADO contra la cifra oficial de las dos ciudades que sí la publican, antes de usarlo:
+     Temuco       94,6 % reconstruido vs 94,6 % publicado   (y 91,4 % vs 91,4 % en el corte ≥80 %)
+     Punta Arenas 92,7 % reconstruido vs 92,7 % publicado   (y 89,7 % vs 89,7 %)
+   4 de 4 exactos ⇒ es la MISMA definición del generador, no una variante. `derivado` queda en true para
+   poder decirlo en pantalla. */
+function cobEstPct(){
+  const pub = COB && COB.resumen && COB.resumen.cob_est && COB.resumen.cob_est.pct_hogares_cubiertos;
+  if(typeof pub === "number" && isFinite(pub)) return {pct:pub, derivado:false};
+  const fs = (COB && COB.features) || null;
+  if(!fs || !fs.length) return {pct:null, derivado:false};
+  let num = 0, den = 0;
+  for(const f of fs){
+    const p = f.properties, ce = p && p.cob_est;
+    if(typeof ce !== "number" || !isFinite(ce)) continue;
+    const v = mzHog(p); den += v; num += v * ce / 100;
+  }
+  return den > 0 ? {pct: Math.round(1000*num/den)/10, derivado:true} : {pct:null, derivado:false};
+}
 const empresaDe = ln => { const x=(T.lineas||[]).find(l=>l.linea===ln); return (x&&x.empresa)?x.empresa:(x&&x.nombre)?x.nombre:""; };
 
 /* ---------- menús ---------- */
@@ -146,8 +236,11 @@ function initCityChrome(){
   if(CITY.demanda){ const _db=document.getElementById("modo-demanda-btn"); if(_db) _db.style.display=""; }   // 3er modo solo si hay medio de pago
   const set=(sel,html,attr)=>{ const el=typeof sel==="string"?document.querySelector(sel):sel; if(el){ if(attr) el.setAttribute(attr,html); else el.innerHTML=html; } };
   set(".hero-logo", CITY.sigla||nom.slice(0,2).toUpperCase());
-  set(".hero-content h1", "TRANSPORTE PÚBLICO<br>"+nom.toUpperCase());
-  set("#tb-title", "Transporte · "+nom);
+  if(CITY.eyebrow) set(".eyebrow", CITY.eyebrow);
+  set(".hero-content h1", CITY.heroTitle || ("TRANSPORTE PÚBLICO<br>"+nom.toUpperCase()));
+  if(CITY.heroSub) set(".hero-content p", CITY.heroSub);
+  set("#tb-title", CITY.tbTitle || ("Transporte · "+nom));
+  if(CITY.tbSub) set(".tb-sub", CITY.tbSub);   // subtítulo del header (marca white-label)
   // indicador de estado: feed en vivo (dot + edad) para ciudades LIVE; análisis histórico para estáticas
   set("#hdr-status", CITY.live
       ? `<span class="dot-live"></span><span>actualizado hace <span id="live-age" class="font-mono text-[var(--tx)]">—</span></span>`
@@ -161,7 +254,7 @@ function initCityChrome(){
   // link de GitHub del header → repo de la ciudad
   if(CITY.repo){ const gh=$("hdr-github"); if(gh) gh.setAttribute("href", `https://github.com/romedinag-tech/${CITY.repo}`); }
   // metadatos de la página (título, descripción, canonical/OG) desde CITY
-  const tituloPag = `Centro de Mando · Transporte ${nom}`;
+  const tituloPag = CITY.marca ? `${CITY.marca} · ${nom}` : `Centro de Mando · Transporte ${nom}`;
   const desc = `Analítica del transporte público de ${nom}: flota, velocidad, cobertura y cumplimiento sobre registros GPS.`;
   set('meta[name="description"]', desc, "content");
   document.querySelectorAll('meta[property="og:title"],meta[name="twitter:title"]').forEach(m=>m.setAttribute("content",tituloPag));
@@ -172,7 +265,58 @@ function initCityChrome(){
     document.querySelectorAll('meta[property="og:url"]').forEach(m=>m.setAttribute("content",u));
     document.querySelectorAll('meta[property="og:image"],meta[name="twitter:image"]').forEach(m=>m.setAttribute("content",u+"assets/og.png"));
   }
-  try{ document.title = `${nom} · Centro de Mando`; }catch(e){}
+  try{ document.title = CITY.marca ? `${nom} · ${CITY.marca}` : `${nom} · Centro de Mando`; }catch(e){}
+  // Cara de cliente: renombrar los modos (config) y llevar el selector a un riel vertical a la izquierda (tema).
+  if(CITY.modoLabels){ document.querySelectorAll('#modo-switch button[data-modo]').forEach(b=>{
+    const t=CITY.modoLabels[b.dataset.modo], sp=b.querySelector('span'); if(t&&sp) sp.textContent=t; }); }
+  if(/^cliente/.test(document.documentElement.dataset.theme||"")){
+    const fr=document.querySelector('.flex.flex-1.overflow-hidden'), mb=document.querySelector('.modo-bar');
+    if(fr&&mb&&mb.parentElement!==fr){
+      fr.insertBefore(mb, fr.firstChild);   // nav de modos a la izquierda
+      // Consolidar la navegación: Ciudad (comunas) y Línea (bus) como secciones colapsables del nav.
+      if(!mb.querySelector('.nav-accordions')){
+        const acc=document.createElement('div'); acc.className='nav-accordions';
+        acc.innerHTML=
+          '<div class="nav-sec open" data-sec="ciudad"><button class="nav-sec-h" type="button">Ciudad<span class="chev">▾</span></button><div class="nav-sec-b" id="nav-ciudad"></div></div>'+
+          '<div class="nav-sec" data-sec="linea"><button class="nav-sec-h" type="button">Línea<span class="chev">▸</span></button><div class="nav-sec-b" id="nav-linea"></div></div>';
+        mb.appendChild(acc);
+        const ct=document.getElementById('comuna-tabs'); if(ct) acc.querySelector('#nav-ciudad').appendChild(ct);
+        const os=document.getElementById('oper-sidebar'); if(os) acc.querySelector('#nav-linea').appendChild(os);  // bloque buscar+lista de líneas
+        acc.querySelectorAll('.nav-sec-h').forEach(h=>h.addEventListener('click',()=>{
+          const s=h.parentElement; s.classList.toggle('open');
+          const c=h.querySelector('.chev'); if(c) c.textContent=s.classList.contains('open')?'▾':'▸';
+        }));
+      }
+    }
+    const _exc=document.getElementById('excesos-card'), _nv=document.getElementById('normal-view');
+    if(_exc&&_nv&&_exc.parentElement!==_nv) _nv.appendChild(_exc);   // Excesos de velocidad al fondo de operación
+    // Envolver el contenido NO-KPI de cada vista en .view-content → layout flex [riel | contenido].
+    // Evita el gotcha de grid-row:1/-1 (grilla implícita) que inflaba la fila 1 y rompía el infra-view.
+    ['normal-view','infra-view','demanda-view'].forEach(vid=>{
+      const v=document.getElementById(vid); if(!v || v.querySelector(':scope > .view-content')) return;
+      const kpi=v.querySelector('#kpis2,#infra-kpis,#dem-kpis'); if(!kpi) return;
+      const wrap=document.createElement('div'); wrap.className='view-content';
+      [...v.children].forEach(ch=>{ if(ch!==kpi) wrap.appendChild(ch); });
+      v.appendChild(wrap);
+    });
+    // Reemplazar los 3 LEDs de "telemetría" por DOS ondas de pulsos animadas (datos en vivo, ritmos/colores distintos).
+    const _rt=document.querySelector('.tb-router');
+    if(_rt) _rt.innerHTML='<svg viewBox="0 0 40 20" preserveAspectRatio="none" aria-hidden="true">'+
+      '<path class="wv wv1" fill="none" d="M0 14 H16 L19 4 L22 14 H40 M40 14 H56 L59 4 L62 14 H80"><animateTransform attributeName="transform" type="translate" from="0 0" to="-40 0" dur="1.4s" repeatCount="indefinite"/></path>'+
+      '<path class="wv wv2" fill="none" d="M0 10 H7 L9 17 L11 10 H40 M40 10 H47 L49 17 L51 10 H80"><animateTransform attributeName="transform" type="translate" from="0 0" to="-40 0" dur="2.1s" repeatCount="indefinite"/></path>'+
+      '</svg>';
+  }
+  // Cara GORE Biobío (data-theme="gore"): SOLO re-color claro + logo, sobre el layout ORIGINAL (no cliente-*).
+  // Emblema oficial del Gobierno Regional en el header + co-marca institucional en el subtítulo.
+  if(/^gore/.test(document.documentElement.dataset.theme||"")){
+    const hc=document.querySelector(".hdr-center");
+    if(hc && !hc.querySelector(".gore-emblem")){
+      const img=document.createElement("img");
+      img.className="gore-emblem"; img.src="assets/gore_emblema.png"; img.alt="Gobierno Regional del Biobío";
+      hc.insertBefore(img, hc.firstChild);
+    }
+    const sub=document.querySelector(".tb-sub"); if(sub) sub.textContent="Gobierno Regional del Biobío · Región del Biobío";
+  }
 }
 function buildComunaTabs(){
   const order = (GEO.features||[]).map(f=>f.properties.name);
@@ -259,6 +403,10 @@ function buildLineaList(filter=""){
 
 /* ---------- render ---------- */
 function render(){
+  // ETAPA 2: por defecto NO estamos en la vista de línea compuesta (oferta+demanda apiladas); el hook al
+  // final del bloque de operación la reactiva si corresponde. Esto limpia el estado al cambiar de modo/vista
+  // (p.ej. al entrar al modo demanda independiente, donde el ranking de líneas SÍ debe verse).
+  document.body.classList.remove("linea-page"); lineaSectionHeaders(false);
   // resaltar menús: comuna-bar (territorio + vistas especiales) y líneas (sidebar)
   document.querySelectorAll("#comuna-tabs .ctab").forEach(e=>{
     const on = state.vista==="normal" ? (e.dataset.v==="normal" && e.dataset.c===state.comuna) : (e.dataset.v===state.vista);
@@ -366,6 +514,34 @@ function render(){
   renderVelCiclo();
   // El alto del mapa se ajusta al de velociclo+equidad (vista línea); se mide tras el resize async de los charts.
   setTimeout(syncMapHeight, 150);
+  // ETAPA 2 · VISTA DE LÍNEA compuesta: bajo la oferta operacional, apila el bloque de DEMANDA de la MISMA
+  // línea (reusa renderDemanda, ya line-aware). Prod-safe: solo si la ciudad tiene medio de pago (CITY.demanda)
+  // y la línea tiene dato → una ciudad/línea sin demanda muestra solo la oferta, como antes.
+  const lineaDem = state.linea!=="TODAS" && CITY.demanda && DEM && (DEM.lineas||[]).some(l=>l.linea===state.linea);
+  document.body.classList.toggle("linea-page", !!lineaDem);
+  lineaSectionHeaders(!!lineaDem);
+  if(lineaDem){ $("demanda-view").style.display=""; renderDemanda(); }
+}
+// ETAPA 2 · encabezados de sección de la vista de línea (① Oferta / ② Demanda). Se insertan como HERMANOS
+// SOBRE cada vista (fuera del flex interno de las vistas → no rompen el re-layout de la cara de cliente).
+function lineaSectionHeaders(on){
+  [["normal-view","Oferta — cómo opera la línea","frecuencia · velocidad · cumplimiento · flota · ruta"],
+   ["demanda-view","Demanda — quién y cuánto sube","abordajes (tap-in, sin bajadas) · composición · recaudación · perfil de subidas"]
+  ].forEach(([vid,tt,sub],i)=>{
+    const v=$(vid); if(!v||!v.parentElement) return;
+    let h=document.getElementById("lsh-"+vid);
+    if(on){
+      if(!h){ h=document.createElement("div"); h.id="lsh-"+vid; h.className="linea-sec-h"; v.parentElement.insertBefore(h,v); }
+      h.innerHTML=`<span class="lsh-n">${i+1}</span><span class="lsh-txt"><span class="lsh-t">${tt}</span><span class="lsh-s">${sub}</span></span>`;
+      h.style.display="";
+    } else if(h){ h.style.display="none"; }
+  });
+  // Forzar el ORDEN visual: en el DOM demanda-view viene ANTES que normal-view; para la vista de línea
+  // (oferta arriba, demanda abajo) reubicamos [h2, demanda-view] justo después de normal-view.
+  if(on){
+    const nv=$("normal-view"), dv=$("demanda-view"), h1=$("lsh-normal-view"), h2=$("lsh-demanda-view");
+    if(nv&&dv&&nv.parentElement){ if(h1) nv.parentElement.insertBefore(h1,nv); nv.after(h2||dv, dv); }
+  }
 }
 // Vista de LÍNEA: iguala el alto del mapa a la suma de las tarjetas de la columna derecha
 // (velocidad a lo largo del ciclo + equidad de flota). En otras vistas o en móvil, usa el alto por clase.
@@ -479,19 +655,19 @@ function renderDemPerfil(){
   const D=node.variantes[demPerfVar]; if(!D||!D.km){ if(demPerfChart) demPerfChart.clear(); return; }
   const km=D.km;
   if(!demPerfChart) demPerfChart=echarts.init($("dem-perfil-chart"));
-  const TIPO=[["adulto","Adultos","#34e1c4"],["estudiante","Estudiantes","#60a5fa"],["mayor","Adultos mayores","#f59e0b"]];
-  const PER=[["pmam","Punta mañana","#f59e0b"],["fpam","Fuera punta AM","#8b9bb4"],["pmd","Punta mediodía","#34e1c4"],["pt","Punta tarde","#f472b6"]];
+  const TIPO=[["adulto","Adultos",cssv("--c1")],["estudiante","Estudiantes",cssv("--c2")],["mayor","Adultos mayores",cssv("--c3")]];
+  const PER=[["pmam","Punta mañana",cssv("--c3")],["fpam","Fuera punta AM",cssv("--nodata")],["pmd","Punta mediodía",cssv("--c1")],["pt","Punta tarde",cssv("--c7")]];
   let series, leg;
   if(demPerfDesc==="tipo"){ leg=TIPO.map(t=>t[1]);
     series=TIPO.map(([k,nm,col])=>({name:nm,type:"line",stack:"c",smooth:true,symbol:"none",areaStyle:{opacity:.55},lineStyle:{width:0},itemStyle:{color:col},data:cumsum(D[k])})); }
   else if(demPerfDesc==="per"){ leg=PER.map(t=>t[1]);
     series=PER.map(([k,nm,col])=>({name:nm,type:"line",smooth:true,symbol:"none",lineStyle:{width:2,color:col},itemStyle:{color:col},data:cumsum(D[k])})); }
   else { leg=["Carga acumulada"];
-    series=[{name:"Carga acumulada",type:"line",smooth:true,symbol:"none",areaStyle:{opacity:.18},lineStyle:{width:2.5},itemStyle:{color:"#34e1c4"},data:cumsum(D.tot)}]; }
+    series=[{name:"Carga acumulada",type:"line",smooth:true,symbol:"none",areaStyle:{opacity:.18},lineStyle:{width:2.5},itemStyle:{color:cssv("--c1")},data:cumsum(D.tot)}]; }
   demPerfChart.setOption({grid:{left:52,right:14,top:30,bottom:34},tooltip:{trigger:"axis"},
-    legend:{data:leg,top:0,textStyle:{color:"#8ea3c2",fontSize:10}},
-    xAxis:{type:"category",data:km.map(k=>k.toFixed(1)),name:"km",nameLocation:"middle",nameGap:20,nameTextStyle:{color:"#8ea3c2",fontSize:9},axisLabel:{color:"#8ea3c2",fontSize:9},axisLine:{lineStyle:{color:"#33415580"}}},
-    yAxis:{type:"value",name:"abordajes acum.",nameTextStyle:{color:"#8ea3c2",fontSize:9},axisLabel:{color:"#8ea3c2",fontSize:9},splitLine:{lineStyle:{color:"#33415540"}}},
+    legend:{data:leg,top:0,textStyle:{color:cssv("--muted"),fontSize:10}},
+    xAxis:{type:"category",data:km.map(k=>k.toFixed(1)),name:"km",nameLocation:"middle",nameGap:20,nameTextStyle:{color:cssv("--muted"),fontSize:9},axisLabel:{color:cssv("--muted"),fontSize:9},axisLine:{lineStyle:{color:cssv("--ch-line")}}},
+    yAxis:{type:"value",name:"abordajes acum.",nameTextStyle:{color:cssv("--muted"),fontSize:9},axisLabel:{color:cssv("--muted"),fontSize:9},splitLine:{lineStyle:{color:cssv("--ch-line")}}},
     series},true);
   // CURSOR sincronizado mapa↔perfil: al pasar el mouse por el gráfico, mueve un marcador en el mapa a la
   // posición along-track de ese km (así se ve dónde la carga sube, se aplana o nadie sube).
@@ -522,13 +698,13 @@ function renderDemCurva(){
   const hrs=[]; for(let h=5;h<=23;h++) hrs.push(h);
   const ser=dt=>hrs.map(h=>(DEM.curva[dt]||[])[h]||0);
   demCurva.setOption({grid:{left:46,right:12,top:28,bottom:22},tooltip:{trigger:"axis"},
-    legend:{data:["Laboral","Sábado","Domingo"],top:0,textStyle:{color:"#8ea3c2",fontSize:10}},
-    xAxis:{type:"category",data:hrs.map(h=>h+"h"),axisLabel:{color:"#8ea3c2",fontSize:9},axisLine:{lineStyle:{color:"#33415580"}}},
-    yAxis:{type:"value",axisLabel:{color:"#8ea3c2",fontSize:9},splitLine:{lineStyle:{color:"#33415540"}}},
+    legend:{data:["Laboral","Sábado","Domingo"],top:0,textStyle:{color:cssv("--muted"),fontSize:10}},
+    xAxis:{type:"category",data:hrs.map(h=>h+"h"),axisLabel:{color:cssv("--muted"),fontSize:9},axisLine:{lineStyle:{color:cssv("--ch-line")}}},
+    yAxis:{type:"value",axisLabel:{color:cssv("--muted"),fontSize:9},splitLine:{lineStyle:{color:cssv("--ch-line")}}},
     series:[
-      {name:"Laboral",type:"line",smooth:true,symbol:"none",areaStyle:{opacity:.12},data:ser("L"),lineStyle:{width:2.5},itemStyle:{color:"#34e1c4"}},
-      {name:"Sábado",type:"line",smooth:true,symbol:"none",data:ser("S"),lineStyle:{width:1.5},itemStyle:{color:"#fbbf24"}},
-      {name:"Domingo",type:"line",smooth:true,symbol:"none",data:ser("D"),lineStyle:{width:1.5},itemStyle:{color:"#8b9bb4"}},
+      {name:"Laboral",type:"line",smooth:true,symbol:"none",areaStyle:{opacity:.12},data:ser("L"),lineStyle:{width:2.5},itemStyle:{color:cssv("--c1")}},
+      {name:"Sábado",type:"line",smooth:true,symbol:"none",data:ser("S"),lineStyle:{width:1.5},itemStyle:{color:cssv("--warning")}},
+      {name:"Domingo",type:"line",smooth:true,symbol:"none",data:ser("D"),lineStyle:{width:1.5},itemStyle:{color:cssv("--nodata")}},
     ]});
   setTimeout(()=>{try{demCurva.resize();}catch(e){}},50);
 }
@@ -538,28 +714,28 @@ function renderDemCurvaTipo(){
   const ct=DEM.curva_tipo.L||{};
   if(!demCurvaTipo) demCurvaTipo=echarts.init(el);
   const hrs=[]; for(let h=5;h<=23;h++) hrs.push(h);
-  const TIPOS=[["adulto","Adultos","#34e1c4"],["estudiante","Estudiantes","#60a5fa"],["mayor","Adultos mayores","#f59e0b"]];
+  const TIPOS=[["adulto","Adultos",cssv("--c1")],["estudiante","Estudiantes",cssv("--c2")],["mayor","Adultos mayores",cssv("--c3")]];
   const series=TIPOS.filter(([k])=>ct[k]).map(([k,nm,col])=>({
     name:nm,type:"bar",stack:"tipo",data:hrs.map(h=>(ct[k]||[])[h]||0),itemStyle:{color:col},barMaxWidth:22,emphasis:{focus:"series"}
   }));
   demCurvaTipo.setOption({grid:{left:54,right:14,top:30,bottom:24},
     tooltip:{trigger:"axis",axisPointer:{type:"shadow"}},
-    legend:{data:TIPOS.map(t=>t[1]),top:0,textStyle:{color:"#8ea3c2",fontSize:10}},
-    xAxis:{type:"category",data:hrs.map(h=>h+"h"),axisLabel:{color:"#8ea3c2",fontSize:9},axisLine:{lineStyle:{color:"#33415580"}}},
-    yAxis:{type:"value",name:"abordajes/h",nameTextStyle:{color:"#8ea3c2",fontSize:9},axisLabel:{color:"#8ea3c2",fontSize:9},splitLine:{lineStyle:{color:"#33415540"}}},
+    legend:{data:TIPOS.map(t=>t[1]),top:0,textStyle:{color:cssv("--muted"),fontSize:10}},
+    xAxis:{type:"category",data:hrs.map(h=>h+"h"),axisLabel:{color:cssv("--muted"),fontSize:9},axisLine:{lineStyle:{color:cssv("--ch-line")}}},
+    yAxis:{type:"value",name:"abordajes/h",nameTextStyle:{color:cssv("--muted"),fontSize:9},axisLabel:{color:cssv("--muted"),fontSize:9},splitLine:{lineStyle:{color:cssv("--ch-line")}}},
     series
   },true);
   setTimeout(()=>{try{demCurvaTipo.resize();}catch(e){}},50);
 }
 // helper: barras apiladas por tipo de usuario sobre un eje categórico (semana o meses)
-const DEM_TIPOS=[["adulto","Adultos","#34e1c4"],["estudiante","Estudiantes","#60a5fa"],["mayor","Adultos mayores","#f59e0b"]];
+const DEM_TIPOS=[["adulto","Adultos",cssv("--c1")],["estudiante","Estudiantes",cssv("--c2")],["mayor","Adultos mayores",cssv("--c3")]];
 function _demStackedBar(chart, cats, dataByCat, subLabel){
   const series=DEM_TIPOS.map(([k,nm,col])=>({name:nm,type:"bar",stack:"t",barMaxWidth:34,itemStyle:{color:col},emphasis:{focus:"series"},
     data:cats.map(c=>Math.round((dataByCat[c.lbl]||{})[k]||0))}));
   chart.setOption({grid:{left:54,right:12,top:30,bottom:24},tooltip:{trigger:"axis",axisPointer:{type:"shadow"}},
-    legend:{data:DEM_TIPOS.map(t=>t[1]),top:0,textStyle:{color:"#8ea3c2",fontSize:10}},
-    xAxis:{type:"category",data:cats.map(c=>c.lbl),axisLabel:{color:"#8ea3c2",fontSize:9},axisLine:{lineStyle:{color:"#33415580"}}},
-    yAxis:{type:"value",name:subLabel,nameTextStyle:{color:"#8ea3c2",fontSize:9},axisLabel:{color:"#8ea3c2",fontSize:9},splitLine:{lineStyle:{color:"#33415540"}}},
+    legend:{data:DEM_TIPOS.map(t=>t[1]),top:0,textStyle:{color:cssv("--muted"),fontSize:10}},
+    xAxis:{type:"category",data:cats.map(c=>c.lbl),axisLabel:{color:cssv("--muted"),fontSize:9},axisLine:{lineStyle:{color:cssv("--ch-line")}}},
+    yAxis:{type:"value",name:subLabel,nameTextStyle:{color:cssv("--muted"),fontSize:9},axisLabel:{color:cssv("--muted"),fontSize:9},splitLine:{lineStyle:{color:cssv("--ch-line")}}},
     series},true);
   setTimeout(()=>{try{chart.resize();}catch(e){}},50);
 }
@@ -602,7 +778,7 @@ function renderDemMap(){
   // recorrido de la línea elegida (debajo de los puntos), para ver DÓNDE sube más gente sobre su traza
   if(lineMode && GEOM[state.linea]){
     GEOM[state.linea].forEach(sg=>{ if(sg.p&&sg.p.length>1)
-      L.polyline(sg.p.map(p=>[p[0],p[1]]),{color:"#5b7aa8",weight:2,opacity:.5}).addTo(dmapLayer); });
+      L.polyline(sg.p.map(p=>[p[0],p[1]]),{color:cssv("--ref"),weight:2,opacity:.5}).addTo(dmapLayer); });
   }
   if(SRC&&SRC.length){
     const pts=SRC.filter(b=>(demSen==="amb"||b.s===demSen) && (!lineMode||b.l===state.linea)).map(b=>({b,v:demEslVal(b)})).filter(x=>x.v>0);
@@ -619,13 +795,22 @@ function renderDemMap(){
   dmapLayer.addTo(dmap);
   setTimeout(()=>{try{dmap.invalidateSize();}catch(e){}},60);
 }
+/* nota de procedencia bajo la banda de KPIs; _kpiNote(null) la oculta */
+function _kpiNote(html){
+  const n = $("kpis2-note"); if(!n) return;
+  if(!html){ n.hidden = true; n.innerHTML = ""; return; }
+  n.innerHTML = `<span class="dot"></span><span>${html}</span>`;
+  n.hidden = false;
+}
 function renderKPIs(cell){
   const home = state.vista==="normal" && state.linea==="TODAS" && state.comuna==="TODAS";
   const lineView = state.vista==="normal" && state.linea!=="TODAS";
   const comView = state.vista==="normal" && state.comuna!=="TODAS" && state.linea==="TODAS";
-  if((home || lineView || comView) && DIA && BASE30){ renderLiveKPIs(); return; }
+  // COMUNA: el vivo NO sirve a esta escala (ver renderComunaKPIs) → banda histórica, nunca la vacía.
+  if(comView){ renderComunaKPIs(); return; }
+  if((home || lineView) && DIA && BASE30){ renderLiveKPIs(); return; }
   const k = cell.kpi;
-  if(!k){ $("kpis2").innerHTML = `<div class="empty">Sin datos para este ámbito.</div>`; return; }
+  if(!k){ $("kpis2").innerHTML = `<div class="empty">Sin datos para este ámbito.</div>`; _kpiNote(null); return; }
   const ctx = kpiCard("Líneas", k.n_lineas, "operando en el ámbito", IC.bus, "neutral");
   $("kpis2").innerHTML = [
     kpiCard("Flota en punta", fmt(k.flota_pico), "buses activos máx/hora", IC.bus, "neutral"),
@@ -633,6 +818,53 @@ function renderKPIs(cell){
     kpiCard("Tiempo detenido", fmt1(k.pct_det)+" %", "en ruta · excl. terminales", IC.stop, semLow(k.pct_det,18,28)),
     ctx,
   ].join("");
+  _kpiNote(null);
+}
+/* ═══ BANDA DE KPIs EN VISTA DE COMUNA ════════════════════════════════════════════════════════════
+   Antes esta vista pedía KPIs VIVOS y la banda salía vacía: siete tarjetas en 0 y "—" (medido en
+   Temuco: buses_op/term/descanso/inact = 0, vel/det = "—", freq = 0/h). Dos razones, las dos de fondo:
+     · `dia.json` del capturador NO desglosa por comuna — solo trae sistema y línea; y
+     · la agregación de respaldo (sumar las líneas de la comuna) se apoya en CLIN, que viene de
+       `comuna_lineas.json`; ese archivo existe en GCCP pero NO en las ciudades portadas, así que
+       CLIN = {} y toda suma por comuna recorre un conjunto vacío.
+   No se le pide el desglose al capturador: costaría CPU por invocación y el presupuesto es acotado.
+   Se muestran entonces las cifras ESTÁTICAS de la celda `<comuna>|TODAS` de territorio.json, con sello
+   "histórico" por tarjeta y una nota bajo la banda para que nadie las lea como si fueran del vivo.
+   La tarjeta "Cobertura ahora" sí es del vivo y sí es correcta por comuna (se calcula en el navegador
+   sobre live.json + cobertura.json), así que se conserva: la agrega renderLiveExtras() y su propio
+   rótulo dice "ahora". */
+function renderComunaKPIs(){
+  const cont = $("kpis2"); if(!cont) return;
+  const C = state.comuna;
+  const cell = (T && T.cells && T.cells[`${C}|TODAS`]) || null;
+  const k = cell && cell.kpi;
+  if(!k){                                  // degradación limpia: sin celda no hay banda, y sin excepción
+    cont.dataset.lin = "";
+    cont.innerHTML = `<div class="empty">Sin cifras agregadas para ${C} en territorio.json.</div>`;
+    _kpiNote(null);
+    return;
+  }
+  const histCard = (lab,val,sub,icon,stt) => {
+    const st = stt || "neutral";
+    return `<div class="kpi k-hist ${SEM_CARD[st]}" data-k="hist">`+
+      `<div class="lab">${icon?`<span class="ic">${icon}</span>`:""}<span>${lab}</span>`+
+      `<span class="hist-tag" title="Cifra del registro histórico: el capturador en vivo no desglosa por comuna">histórico</span></div>`+
+      `<div class="val ${SEM_CLS[st]}">${val}</div><div class="sub">${sub}</div></div>`;
+  };
+  const nl = k.n_lineas==null ? "—" : fmt(k.n_lineas);
+  cont.dataset.lin = "";                   // invalida el cache de tarjetas vivas de renderLiveKPIs
+  cont.innerHTML = [
+    histCard("Flota en punta", k.flota_pico==null?"—":fmt(k.flota_pico), "buses activos máx/hora", IC.bus, "neutral"),
+    histCard("Velocidad media", k.vel==null?"—":fmt1(k.vel)+" km/h", "efectiva, en ruta", IC.zap, k.vel==null?"neutral":semHigh(k.vel,22,14)),
+    histCard("Tiempo detenido", k.pct_det==null?"—":fmt1(k.pct_det)+" %", "en ruta · excl. terminales", IC.stop, k.pct_det==null?"neutral":semLow(k.pct_det,18,28)),
+    histCard("Líneas", nl, `operando en ${C}`, IC.bus, "neutral"),
+  ].join("");
+  // "Cobertura ahora" (vivo, correcta por comuna). Silenciosa si la ciudad es estática o el feed no cargó.
+  try{ renderLiveExtras(); }catch(e){}
+  const vivo = !!cont.querySelector('.klive');
+  _kpiNote(`Cifras de <b>${C}</b> tomadas del <b>registro histórico</b> (territorio.json): el seguimiento `+
+           `en vivo se publica por sistema y por línea, no por comuna.`+
+           (vivo ? ` La tarjeta <b>Cobertura ahora</b> sí es del vivo.` : ``));
 }
 
 /* ---------- Recuadros del INICIO: vivo (dia.json) vs baseline histórico del bin actual ----------
@@ -843,6 +1075,12 @@ function _baseVal(s, base, b, L){
   return (base[s.k]||[])[b];
 }
 function renderLiveKPIs(){
+  // CHOKE POINT: la vista de COMUNA no se sirve del vivo (dia.json no desglosa por comuna). Se redirige
+  // acá y no en cada llamador, porque además de render() entran loadDia() y loadLive() cada refresco —
+  // si uno se olvidaba, volvía a pintar la banda vacía encima de la histórica sin fallar en nada.
+  if(state.vista==="normal" && state.comuna!=="TODAS" && state.linea==="TODAS"){ renderComunaKPIs(); return; }
+  if(!DIA || !BASE30) return;                       // ciudad estática o feed aún sin cargar
+  _kpiNote(null);                                   // sistema/línea SÍ son vivo → sin nota de histórico
   const base = BASE30[DIA.dia_tipo] || {}, b = DIA.bin;
   const L = state.linea!=="TODAS" ? state.linea : null;
   const cont = $("kpis2");
@@ -892,14 +1130,15 @@ function loadDia(){
 
 /* ===== KPIs en vivo EXTRA: cobertura instantánea + déficit por línea =====
    "Foto" en cada refresh de live.json: una manzana está cubierta AHORA si hay ≥1 bus a ≤300 m
-   de su centroide. KPI 1 = % de hogares cubiertos de CCP. KPI 2 = mismo % por comuna.
+   de su centroide. KPI 1 = % del padrón cubierto de la ciudad (hogares, o habitantes donde la capa no
+   trae hogares — ver cobUnit()). KPI 2 = mismo % por comuna.
    KPI 3 = top-5 líneas con menor (buses_ahora / flota_pico).
    Costo: cero en cloud — todo se computa en el navegador sobre live.json + cobertura.json. */
 let MANZ_GRID = null;                     // grid espacial: bucket → [{i, cy, cx, hog, com}]
 const COB_BUCKET = 0.003;                 // ~330 m por bucket (suficiente para BUF=300 m con 9 buckets)
 const COB_BUF = 300, COB_BUF2 = COB_BUF*COB_BUF;   // radio de cápsula instantánea
 let TOT_HOG_GLOBAL = 0;
-const TOT_HOG_COM = {};                   // {comuna: total hogares}
+const TOT_HOG_COM = {};                   // {comuna: total del padrón} — hogares o habitantes, ver cobUnit()
 const FLOTA_PICO_LIN = {};                // {linea: flota_pico}
 const COM_ORDER = CITY.comunas;
 
@@ -924,9 +1163,9 @@ function buildManzanaIndex(){
       for(const c of comunas){ if(_pipPoly(p.cy, p.cx, c.geom)){ p._com = c.name; break; } }
     }
     const k = `${Math.floor(p.cy/COB_BUCKET)}_${Math.floor(p.cx/COB_BUCKET)}`;
-    (MANZ_GRID[k] = MANZ_GRID[k] || []).push({i, cy:p.cy, cx:p.cx, hog:p.hog||0, com:p._com||null});
-    TOT_HOG_GLOBAL += (p.hog||0);
-    if(p._com) TOT_HOG_COM[p._com] = (TOT_HOG_COM[p._com]||0) + (p.hog||0);
+    (MANZ_GRID[k] = MANZ_GRID[k] || []).push({i, cy:p.cy, cx:p.cx, hog:mzHog(p), com:p._com||null});
+    TOT_HOG_GLOBAL += mzHog(p);
+    if(p._com) TOT_HOG_COM[p._com] = (TOT_HOG_COM[p._com]||0) + mzHog(p);
   });
   if(T && T.cells){
     Object.entries(T.cells).forEach(([k, v]) => {
@@ -956,7 +1195,7 @@ function computeLiveExtras(filterL){
   }
   let cob_hog = 0; const cob_hog_com = {};
   for(const i of covered){
-    const p = COB.features[i].properties, h = p.hog||0;
+    const p = COB.features[i].properties, h = mzHog(p);
     cob_hog += h;
     if(p._com) cob_hog_com[p._com] = (cob_hog_com[p._com]||0) + h;
   }
@@ -1030,16 +1269,17 @@ function liveBoxCobAhora(hog, tot, pct, nb){
   const lx=(cx+(r+16)*Math.cos(a)).toFixed(1), ly=(cy-(r+16)*Math.sin(a)).toFixed(1);
   const valTxt = NF.format(Math.round(hog));
   const pctTxt = pct==null ? "—" : pct.toFixed(1)+"%";
-  // Block 3 — arco de relleno puro (sin aguja/hub/%). Rango 0–100% = fracción de hogares cubiertos ≤300 m.
+  // Block 3 — arco de relleno puro (sin aguja/hub/%). Rango 0–100% = fracción del padrón cubierto ≤300 m
+  // (hogares donde la capa los trae; habitantes en las ciudades sin catastro SII — ver cobUnit()).
   const prog = pct==null ? "" :
     `<path d="M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${tx} ${ty}" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round"/>`;
   return `<div class="kpi klive" data-k="cob_now" style="border-color:${col}30"><div class="lab"><span class="ic">${IC.home}</span>Cobertura ahora</div>`+
     `<svg class="gauge" viewBox="-8 -12 216 118">`+
       `<path class="g-track" d="M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}" fill="none" stroke="var(--line-soft)" stroke-width="8" stroke-linecap="round"/>`+
       prog+
-      `<text x="${cx}" y="58" text-anchor="middle" dominant-baseline="middle" class="g-val">${valTxt}<tspan class="g-unit" dx="2"> hog</tspan></text>`+
+      `<text x="${cx}" y="58" text-anchor="middle" dominant-baseline="middle" class="g-val">${valTxt}<tspan class="g-unit" dx="2"> ${HOGS()}</tspan></text>`+
     `</svg>`+
-    `<div class="sub">de <b class="g-norm">${NF.format(tot)}</b> hogares · <b>${nb}</b> buses</div></div>`;
+    `<div class="sub">de <b class="g-norm">${NF.format(tot)}</b> ${HOGL()} · <b>${nb}</b> buses</div></div>`;
 }
 function liveBoxCobComuna(byCom){
   const rows = COM_ORDER.map(name => {
@@ -1054,13 +1294,13 @@ function liveBoxCobComuna(byCom){
   }).join("");
   return `<div class="kpi klive" data-k="cob_com"><div class="lab"><span class="ic">${IC.map}</span>Cobertura por comuna</div>`+
     `<div class="kcr-list">${rows}</div>`+
-    `<div class="sub">% hogares con ≥1 bus ≤300 m</div></div>`;
+    `<div class="sub">% ${HOGL()} con ≥1 bus ≤300 m</div></div>`;
 }
 function _linFleetRow(d, top){
   const pct = d.pct;
   const col = top
-    ? (pct>=100 ? "#34d399" : pct>=80 ? "#a3e635" : "#fbbf24")
-    : (pct>=70 ? "#fbbf24" : pct>=40 ? "#fb923c" : "#f87171");
+    ? (pct>=100 ? cssv("--good") : pct>=80 ? cssv("--c8") : cssv("--warning"))
+    : (pct>=70 ? cssv("--warning") : pct>=40 ? cssv("--c9") : cssv("--critical"));
   const w = Math.min(100, pct);
   const emp = empresaDe(d.L);
   const nm = emp ? `<span class="lncode">${d.L}</span> ${emp}` : `<span class="lncode">${d.L}</span>`;
@@ -1106,12 +1346,18 @@ function renderCobDinLinea(){
   const pill = (ic,lab,val,sub) =>
     `<div class="cdl-pill"><div class="lab">${ic?`<span>${ic}</span>`:""}${lab}</div>`+
     `<div class="val">${val}</div>${sub?`<div class="sub">${sub}</div>`:""}</div>`;
+  // El NSE viene del avalúo del catastro SII: sin SII, info.nse_* llega en 0 para TODOS los terciles y
+  // un "0" afirmaría una medición que no existe → se declara "sin dato NSE".
+  const _nseOk = cobHasNSE() && ((info.nse_lo||0)+(info.nse_md||0)+(info.nse_hi||0)) > 0;
+  const _pillNSE = (ic,lab,v,base) => _nseOk
+    ? pill(ic, lab, v==null?"—":NF.format(v), `de ${NF.format(base)} ${HOGS()}`)
+    : pill(ic, lab, "—", "sin dato NSE");
   $("cdl-grid").innerHTML = [
-    pill(IC.home,"Hogares cubiertos", hogDin==null?"—":NF.format(hogDin), `${pct==null?"—":pct+"%"} del tiempo · base ${NF.format(info.hog)}`),
-    pill(IC.nseDn,"NSE bajo", nseLoDin==null?"—":NF.format(nseLoDin), `de ${NF.format(info.nse_lo)} hog`),
-    pill(IC.nseMd,"NSE medio", nseMdDin==null?"—":NF.format(nseMdDin), `de ${NF.format(info.nse_md)} hog`),
-    pill(IC.nseUp,"NSE alto", nseHiDin==null?"—":NF.format(nseHiDin), `de ${NF.format(info.nse_hi)} hog`),
-    pill(IC.ruler,"Hogares por km", info.hog_por_km==null?"—":NF.format(info.hog_por_km), `línea ${info.km} km`),
+    pill(IC.home,`${HOGC()} cubiertos`, hogDin==null?"—":NF.format(hogDin), `${pct==null?"—":pct+"%"} del tiempo · base ${NF.format(info.hog)}`),
+    _pillNSE(IC.nseDn,"NSE bajo", nseLoDin, info.nse_lo),
+    _pillNSE(IC.nseMd,"NSE medio", nseMdDin, info.nse_md),
+    _pillNSE(IC.nseUp,"NSE alto", nseHiDin, info.nse_hi),
+    pill(IC.ruler,`${HOGC()} por km`, info.hog_por_km==null?"—":NF.format(info.hog_por_km), `línea ${info.km} km`),
     pill(IC.cycle,"Ciclos/bus/día", info.ciclos_bus_dia==null?"—":info.ciclos_bus_dia.toFixed(1), `flota ${info.buses??"—"} · ${info.despachos_dia_L??"—"} desp/día`),
   ].join("");
   $("cdl-sub").textContent = `línea ${L} · ${periodoLbl(per)} · f=${f==null?"—":f.toFixed(1)} bus/h · headway ${H==null?"—":H.toFixed(1)+" min"}`;
@@ -1119,7 +1365,10 @@ function renderCobDinLinea(){
   if(narr){
     narr.innerHTML = `Modelo <b>cápsula 2 min + 300 m</b>: cada bus cubre su trazado durante ~2 min al pasar. `+
       `Con <b>${f==null?"—":f.toFixed(1)} bus/h</b> el headway es <b>${H==null?"—":H.toFixed(1)} min</b> → cobertura del <b>${pct==null?"—":pct+"%"}</b> del tiempo en ${periodoLbl(per)}. `+
-      `Los hogares cubiertos dinámicamente son los <b>estáticos × frac</b>; los KPIs por NSE muestran cómo se distribuyen entre terciles (bajo &lt; ${NF.format(DINL.nse_terciles?.lo_lt||0)} / medio &lt; ${NF.format(DINL.nse_terciles?.md_lt||0)} / alto ≥ ${NF.format(DINL.nse_terciles?.md_lt||0)} CLP/m²).`;
+      `Los ${HOGL()} cubiertos dinámicamente son los <b>estáticos × frac</b>. `+
+      (_nseOk
+        ? `Los KPIs por NSE muestran cómo se distribuyen entre terciles (bajo &lt; ${NF.format(DINL.nse_terciles?.lo_lt||0)} / medio &lt; ${NF.format(DINL.nse_terciles?.md_lt||0)} / alto ≥ ${NF.format(DINL.nse_terciles?.md_lt||0)} CLP/m²).`
+        : `El desglose por NSE requiere el avalúo del catastro SII, que esta ciudad no tiene cargado: queda <b>sin dato</b>.`);
   }
 }
 function renderFreqChart(){
@@ -1151,7 +1400,7 @@ function renderFreqChart(){
     xAxis:{type:"category",data:x,axisLabel:{color:th.mut,fontSize:9,interval:1},axisLine:{lineStyle:{color:th.axis}}},
     yAxis:{type:"value",name:"despachos/hora",nameTextStyle:{color:th.mut,fontSize:10},axisLabel:{color:th.mut},splitLine:{lineStyle:{color:th.grid}}},
     series:[
-      {name:"Exigida (GTFS)",type:"line",data:exigida,smooth:true,symbol:"none",lineStyle:{width:2.5,color:"#fbbf24",type:"dashed"},itemStyle:{color:"#fbbf24"}},
+      {name:"Exigida (GTFS)",type:"line",data:exigida,smooth:true,symbol:"none",lineStyle:{width:2.5,color:cssv("--warning"),type:"dashed"},itemStyle:{color:cssv("--warning")}},
       {name:"Salida (observada)",type:"line",data:salida,smooth:true,symbol:"none",lineStyle:{width:2,color:cssv("--live")},itemStyle:{color:cssv("--live")},areaStyle:{color:cssv("--live")+"18"}},
     ],
   },true);
@@ -1207,7 +1456,7 @@ function renderLineFreqChart(){
     xAxis:{type:"category",data:x,axisLabel:{color:th.mut,fontSize:9,interval:1},axisLine:{lineStyle:{color:th.axis}}},
     yAxis:{type:"value",name:"despachos/hora",nameTextStyle:{color:th.mut,fontSize:10},axisLabel:{color:th.mut},splitLine:{lineStyle:{color:th.grid}}},
     series:[
-      {name:"Exigida (GTFS)",type:"line",data:exig,smooth:true,symbol:"none",lineStyle:{width:2.5,color:"#fbbf24",type:"dashed"},itemStyle:{color:"#fbbf24"}},
+      {name:"Exigida (GTFS)",type:"line",data:exig,smooth:true,symbol:"none",lineStyle:{width:2.5,color:cssv("--warning"),type:"dashed"},itemStyle:{color:cssv("--warning")}},
       {name:"Salida en vivo",type:"line",data:vivo,smooth:true,symbol:"none",lineStyle:{width:2.4,color:cssv("--live")},itemStyle:{color:cssv("--live")},areaStyle:{color:cssv("--live")+"20"}},
     ],
   },true);
@@ -1250,7 +1499,7 @@ function renderLineFreqHist(){
     xAxis:{type:"category",data:x,axisLabel:{color:th.mut,fontSize:9,interval:1},axisLine:{lineStyle:{color:th.axis}}},
     yAxis:{type:"value",name:"despachos/hora",nameTextStyle:{color:th.mut,fontSize:10},axisLabel:{color:th.mut},splitLine:{lineStyle:{color:th.grid}}},
     series:[
-      {name:"Exigida (GTFS)",type:"line",data:exigida,smooth:true,symbol:"none",lineStyle:{width:2.5,color:"#fbbf24",type:"dashed"},itemStyle:{color:"#fbbf24"}},
+      {name:"Exigida (GTFS)",type:"line",data:exigida,smooth:true,symbol:"none",lineStyle:{width:2.5,color:cssv("--warning"),type:"dashed"},itemStyle:{color:cssv("--warning")}},
       {name:"Salida (observada)",type:"line",data:salida,smooth:true,symbol:"none",connectNulls:false,lineStyle:{width:2,color:cssv("--live")},itemStyle:{color:cssv("--live")},areaStyle:{color:cssv("--live")+"12"}},
     ],
   },true);
@@ -1299,7 +1548,7 @@ function renderVarObserved(){
     let ch=varObsCharts[v];
     if(!ch){ ch=echarts.init(chEl); varObsCharts[v]=ch; }
     const series=[];
-    if(tieneHist) series.push({name:"histórico",type:"line",data:hist,smooth:true,symbol:"none",lineStyle:{width:2,color:"#fbbf24",type:"dashed"},itemStyle:{color:"#fbbf24"}});
+    if(tieneHist) series.push({name:"histórico",type:"line",data:hist,smooth:true,symbol:"none",lineStyle:{width:2,color:cssv("--warning"),type:"dashed"},itemStyle:{color:cssv("--warning")}});
     series.push({name:"en vivo",type:"line",data:vivo,smooth:true,symbol:"none",connectNulls:false,lineStyle:{width:2.2,color:cssv("--live")},itemStyle:{color:cssv("--live")},areaStyle:{color:cssv("--live")+"14"}});
     ch.setOption({
       textStyle:{fontFamily:th.font,color:th.tx},
@@ -1320,8 +1569,8 @@ function renderVarObserved(){
     (sinHist?` ${sinHist} recorrido(s) aún sin histórico comparable suficiente — se muestran solo en vivo, sin juzgar sub/sobreoferta.`:``);
 }
 // ==================== OBSERVATORIO DE INFRAESTRUCTURA ====================
-function iflowCol(p){ return p>=200?"#fb7185":p>=100?"#f5a524":p>=40?"#22d3ee":"#64748b"; }
-function ibrechaCol(s){ return s>=120?"#fb7185":s>=60?"#f59e0b":s>=25?"#fbbf24":"#64748b"; }
+function iflowCol(p){ return p>=200?cssv("--critical"):p>=100?cssv("--infra-pistabus"):p>=40?cssv("--c6"):cssv("--infra-none"); }
+function ibrechaCol(s){ return s>=120?cssv("--critical"):s>=60?cssv("--c3"):s>=25?cssv("--warning"):cssv("--infra-none"); }
 function ikpi(l,v,u,c){ return `<div class="kpi" style="border-color:${c}30"><div class="lab"><span class="ic-dot" style="background:${c};margin-right:6px;width:10px;height:10px;border-radius:3px;display:inline-block"></span>${l}</div><div class="val" style="color:${c};font-size:26px;margin-top:6px">${v}<span style="font-size:13px;color:var(--muted);font-weight:600"> ${u||""}</span></div></div>`; }
 function iInitMap(){
   if(imap) return;
@@ -1345,7 +1594,7 @@ function _renderEjeDiag(){
   for(const b of B){
     const lat=b[0],lon=b[1],bi=b[2],ds=b[3],np_=b[4], mine=bi===ei;
     if(bb){ if(lat<bb[0]-M||lat>bb[1]+M||lon<bb[2]-M||lon>bb[3]+M) continue; } else if(!mine) continue;
-    const col = mine ? (ds>0?"#34E1C4":"#f87171") : "#64748b";
+    const col = mine ? (ds>0?cssv("--c1"):cssv("--critical")) : cssv("--infra-none");
     const r = mine ? 2.4+3.6*Math.sqrt(np_/maxP) : 2, op = mine?0.9:0.32;
     const cm=L.circleMarker([lat,lon],{radius:r,color:col,weight:mine?1:0.4,fillColor:col,fillOpacity:op,stroke:mine})
       .bindTooltip(`${EJEDIAG.ejes[bi]}${mine?(ds>0?" · sentido +":" · sentido −"):" · (otro eje)"} · ${np_.toLocaleString()} pulsos`,{sticky:true});
@@ -1372,15 +1621,21 @@ function infraStrip(){
   const proy=(INFRAE.total_km-INFRAE.km_operacion);
   const kel=$("infra-kpis"); kel.className="";   // grilla auto-fit por estilo (xl:grid-cols-8 no está en el tw.css compilado)
   kel.style.display="grid"; kel.style.gap="12px"; kel.style.gridTemplateColumns="repeat(auto-fit,minmax(135px,1fr))";
-  const fijos=[
-    ["Red plan",INFRAE.total_km,"km","#e2e8f0"],
-    ["En operación",INFRAE.km_operacion,"km","#34d399"],
-    ["En proyecto",km1(proy),"km","#fbbf24"],
+  // Data-driven: los KPIs "Red plan / En operación / En proyecto" solo tienen sentido si HAY obras en proyecto
+  // (el plan difiere de lo que ya opera). Sin proyecto (p.ej. Temuco: plan=operación, 0 en proyecto) las tres
+  // cifras son redundantes y confunden → se colapsan a un único indicador honesto.
+  const hayPlan = proy > 0.1;
+  const fijos = hayPlan ? [
+    ["Red plan",INFRAE.total_km,"km",cssv("--text-hi")],
+    ["En operación",INFRAE.km_operacion,"km",cssv("--good")],
+    ["En proyecto",km1(proy),"km",cssv("--warning")],
+  ] : [
+    ["Red con transporte público",INFRAE.km_operacion,"km",cssv("--good")],
   ];
   if(SHOW_EFECTIVOS) fijos.push(["Ejes efectivos",INFRAE.km_efectivo||0,"km",IEFECT]);
   // km por tipo de infraestructura (solo los presentes), mismos colores que el mapa
   const porTipo=Object.entries(t).filter(([,v])=>v>0.05).sort((a,b)=>b[1]-a[1])
-    .map(([k,v])=>[k,km1(v),"km",ITIPO[k]||"#64748b"]);
+    .map(([k,v])=>[k,km1(v),"km",ITIPO[k]||cssv("--infra-none")]);
   kel.innerHTML=fijos.concat(porTipo).map(k=>ikpi(...k)).join("");
 }
 // Banderita: marca el ESLABÓN PICO (dónde se mide el flujo del corredor) del eje seleccionado. El flujo
@@ -1438,7 +1693,7 @@ function _ejeVelRep(nm){                 // v50 representativa (mediana horas de
   return xs.length?xs[Math.floor(xs.length/2)]:null;
 }
 function _velColor(v){                    // verde (rápido) → rojo (lento)
-  if(v==null) return "#64748b";
+  if(v==null) return cssv("--infra-none");
   const t=Math.max(0,Math.min(1,(v-8)/20)); return `hsl(${Math.round(t*120)},68%,44%)`;
 }
 function _ejeVelVal(nm){                   // velocidad a mapear: media (normal) o día crítico (estabilidad)
@@ -1482,7 +1737,7 @@ function renderInfraPlan(){
   const MM=state.infraMapMode||"tipo";
   const clk=e=>()=>{state.infraSel={kind:"plangrp",name:e.eje};renderInfra();};
   if(MM==="flujo"){
-    P.forEach(e=>{ const on=selName===e.eje; iPoly(e.segs,"#94a3b8",on?2.2:1.3,null,clk(e),`${e.eje}`,0.55); });
+    P.forEach(e=>{ const on=selName===e.eje; iPoly(e.segs,cssv("--infra-mixto"),on?2.2:1.3,null,clk(e),`${e.eje}`,0.55); });
     P.forEach(e=>{ const pk=_ejeFlowPk(e.eje); if(!pk||pk.tot<=0) return;
       const fe=FLUJOEJES.ejes[e.eje], lb=fe&&fe.lbl||["",""];
       // una cinta por CADA sentido con flujo>0: una-vía dibuja una sola (da igual s1 o s2); bidireccional, ambas
@@ -1492,7 +1747,7 @@ function renderInfraPlan(){
     P.forEach(e=>{ const on=selName===e.eje; const v=_ejeVelVal(e.eje);
       iPoly(e.segs,_velColor(v),on?7:5,null,clk(e),`${e.eje}${v!=null?" · "+Math.round(v)+" km/h":" · sin dato"}`); });
   } else {
-    P.forEach(e=>{ const on=selName===e.eje; iPoly(e.segs,ITIPO[e.tipo]||"#64748b",on?7:(e.tipo==="Corredor"?5:4.2),e.estado!=="Operación"?"6 7":null,clk(e),`${e.eje} · ${e.tipo} · ${e.km} km · ${e.estado}`); });
+    P.forEach(e=>{ const on=selName===e.eje; iPoly(e.segs,ITIPO[e.tipo]||cssv("--infra-none"),on?7:(e.tipo==="Corredor"?5:4.2),e.estado!=="Operación"?"6 7":null,clk(e),`${e.eje} · ${e.tipo} · ${e.km} km · ${e.estado}`); });
   }
   if(MM==="tipo") EF.forEach(e=>{ const on=selEf===e; iPoly(e.segs,IEFECT,on?7.5:5.5,null,()=>{state.infraSel={kind:"efec",e};renderInfra();},`${e.eje} · efectivo · ${e.km} km`,0.95); });
   // LEYENDA + narrativa según el modo del mapa
@@ -1509,11 +1764,15 @@ function renderInfraPlan(){
       ? `<b>Velocidad en día crítico · HORA PUNTA</b> por eje (percentil 15 de los días, 7-9 y 17-19 h). Comparar con <b>media</b> revela la <b>robustez</b>: un corredor segregado casi no cae; uno mixto colapsa en punta (rojo). Clic para su curva.`
       : `<b>Velocidad operativa media por eje</b> (v50 física). <span style="color:hsl(120,68%,44%)">Verde</span> = fluido · <span style="color:hsl(0,68%,44%)">rojo</span> = lento.${hasCrit?' Alterná a <b>día crítico</b> para ver estabilidad.':''}`;
   } else if(MM==="flujo"){
-    lg.innerHTML=[[">=200","#fb7185"],["100–199","#f5a524"],["40–99","#22d3ee"],["<40","#64748b"]].map(([l,c])=>`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><i class="ic-dot" style="background:${c}"></i>${l} b/h</span>`).join("")+`<span style="font-size:11px;color:var(--text-lo)">ancho ∝ flujo · una cinta por sentido (2 lados = bidireccional)</span>`;
+    lg.innerHTML=[[">=200",cssv("--critical")],["100–199",cssv("--infra-pistabus")],["40–99",cssv("--c6")],["<40",cssv("--infra-none")]].map(([l,c])=>`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><i class="ic-dot" style="background:${c}"></i>${l} b/h</span>`).join("")+`<span style="font-size:11px;color:var(--text-lo)">ancho ∝ flujo · una cinta por sentido (2 lados = bidireccional)</span>`;
     $("infra-narr").innerHTML=`<b>Flujo de buses por eje</b> (pico horario, histórico laborable). El <b>ancho</b> de la cinta es proporcional al flujo; se dibuja <b>a un lado por sentido</b> — un solo lado = una vía, ambos = bidireccional. Clic para el detalle.`;
   } else {
     lg.innerHTML=Object.entries(ITIPO).filter(([k])=>k!=="—" && (tAgg[k]||0)>0.05).map(([k,c])=>`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><i class="ic-dot" style="background:${c}"></i>${k}</span>`).join("")+`<span style="font-size:12px;color:var(--muted)">╌ en proyecto</span>`+(EF.length?`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><i class="ic-dot" style="background:${IEFECT}"></i>Efectivo (real)</span>`:"");
-    $("infra-narr").innerHTML=`<b>Plan de infraestructura declarada</b>: ${GA.length} ejes (${INFRAE.km_operacion} km en operación · ${(INFRAE.total_km-INFRAE.km_operacion).toFixed(1)} en proyecto). Color por <b>tipo</b> de infraestructura; punteado = proyectado.`+(EF.length?` En <span style="color:${IEFECT}">magenta</span>, los <b>ejes efectivos</b>, ${INFRAE.km_efectivo||0} km.`:"");
+    { const _p=(INFRAE.total_km-INFRAE.km_operacion);
+      $("infra-narr").innerHTML=(_p>0.1
+        ? `<b>Plan de infraestructura declarada</b>: ${GA.length} ejes (${INFRAE.km_operacion} km en operación · ${_p.toFixed(1)} en proyecto). Color por <b>tipo</b> de infraestructura; punteado = proyectado.`
+        : `<b>Red con transporte público</b>: ${GA.length} ejes · ${INFRAE.km_operacion} km. Color por <b>tipo</b> de infraestructura.`
+      )+(EF.length?` En <span style="color:${IEFECT}">magenta</span>, los <b>ejes efectivos</b>, ${INFRAE.km_efectivo||0} km.`:""); }
   }
   $("infra-list-title").textContent="Ejes del plan"; $("infra-list-hint").textContent=`${GA.length} ejes · ${INFRAE.total_km} km`;
   // LISTA: mismo formato que las líneas del modo Operación (.litem/.ln/.nm), agrupada por nombre → cada fila = un link a la ficha del eje.
@@ -1536,7 +1795,7 @@ function renderInfraFlujo(sub){
     iPoly(c.segs,col,on?w+3:w,null,()=>{state.infraSel={kind:"cor",c};renderInfra();},`${c.nm} · pico ${Math.round(p)} b/h · ${c.vel} km/h · infra ${Math.round(c.cov*100)}%`,op); });
   $("infra-legend").innerHTML= sub==="brechas"
     ? `<span style="font-size:12px;color:var(--muted)">Color = severidad (flujo × déficit de infra × lentitud) · grosor = flujo</span>`
-    : [[">=200","#fb7185"],["100–199","#f5a524"],["40–99","#22d3ee"],["<40","#64748b"]].map(([l,c])=>`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><i class="ic-dot" style="background:${c}"></i>${l} b/h</span>`).join("");
+    : [[">=200",cssv("--critical")],["100–199",cssv("--infra-pistabus")],["40–99",cssv("--c6")],["<40",cssv("--infra-none")]].map(([l,c])=>`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><i class="ic-dot" style="background:${c}"></i>${l} b/h</span>`).join("");
   $("infra-narr").innerHTML= sub==="brechas"
     ? `<b>Brechas</b>: ${C.length} ${CITY.voz.ejePlur} con operación intensa y baja cobertura de infraestructura exclusiva — prioridades de inversión. Clic para ver su perfil horario.`
     : `<b>Operación real</b> (histórico, ${DL2(dia)}): flujo de buses/hora por ${CITY.voz.ejeSing}. Color/grosor = pico de flujo. Clic para ver la curva.`;
@@ -1562,7 +1821,7 @@ function _renderInfraVel(ejeName){
   if(!infraVelChart) infraVelChart=echarts.init($("infra-chart-vel"));
   let series, legend={show:false}, tipFmt, top=14;
   if(hasSent){
-    const S=["s1","s2"], SC=["#34E1C4","#f87171"];
+    const S=["s1","s2"], SC=[cssv("--c1"),cssv("--critical")];
     series=S.map((k,i)=> (sd[k]&&sd[k].vel) ? {name:lbl[i]||("sentido "+(i?"−":"+")),type:"line",smooth:true,symbol:"none",
         connectNulls:true,data:horas.map(h=>sd[k].vel[h]),lineStyle:{width:2.6,color:SC[i]},itemStyle:{color:SC[i]}} : null).filter(Boolean);
     legend={data:series.map(s=>s.name),textStyle:{color:th.mut,fontSize:10},top:0}; top=28;
@@ -1593,7 +1852,7 @@ function _renderInfraExc(ejeName){
   if(!lines.length || !meses.length){ wrap.style.display="none"; return; }
   wrap.style.display="";
   const th=TH();
-  const PAL=["#34E1C4","#6C8FF5","#F4B740","#FF5D73","#a78bfa","#22d3ee","#f472b6","#4ade80","#fb923c","#38bdf8"];
+  const PAL=["--c1","--c2","--c3","--c4","--c5","--c6","--c7","--c8","--c9","--c10"].map(cssv);
   const tot=L=>meses.reduce((s,m)=>s+((ve.exc[L]||{})[m]||0),0);
   const ord=lines.slice().sort((a,b)=>tot(b)-tot(a)).slice(0,10);
   const xlbl=meses.map(m=>m.slice(5)+"/"+m.slice(2,4));
@@ -1611,7 +1870,7 @@ function _renderInfraExc(ejeName){
 }
 // #4 — VELOCIDAD A LO LARGO DEL EJE: perfil territorial (X = km desde el extremo km0) por período del día.
 // Ventana física corta (~400 m): revela DÓNDE cae la velocidad (cuellos) a lo largo del eje, no solo el promedio.
-const _PERF_PER=[["pam","Punta AM","#f5a524"],["mediodia","Mediodía","#22d3ee"],["ppm","Punta PM","#fb7185"],["fuera","Fuera punta","#94a3b8"]];
+const _PERF_PER=[["pam","Punta AM",cssv("--infra-pistabus")],["mediodia","Mediodía",cssv("--c6")],["ppm","Punta PM",cssv("--critical")],["fuera","Fuera punta",cssv("--infra-mixto")]];
 function _perfN(sd){ let n=0; for(const p in sd) (sd[p]||[]).forEach(r=>n+=r[4]||0); return n; }
 // suaviza el ruido bin-a-bin del perfil (media móvil ponderada 1-2-1, respeta huecos y conserva los cuellos)
 function _smooth(a){ return a.map((v,i)=>{ if(v==null) return null; const l=a[i-1],r=a[i+1];
@@ -1674,7 +1933,7 @@ function renderInfraDetail(sel){
     if(fe){
       if(empty)empty.style.display="none"; if(chartEl)chartEl.style.display="";
       const th=TH(), horas=[...Array(24).keys()].filter(h=>h>=5&&h<=23), x=horas.map(h=>h+"h");
-      const series=[["s1",(fe.lbl&&fe.lbl[0])||"sentido A","#22d3ee"],["s2",(fe.lbl&&fe.lbl[1])||"sentido B","#f59e0b"]].map(([k,nm,col])=>({
+      const series=[["s1",(fe.lbl&&fe.lbl[0])||"sentido A",cssv("--c6")],["s2",(fe.lbl&&fe.lbl[1])||"sentido B",cssv("--c3")]].map(([k,nm,col])=>({
         name:nm,type:"line",smooth:true,symbol:"none",connectNulls:false,
         data:horas.map(h=>(fe[k]&&fe[k].L&&fe[k].L[h])?Math.round(fe[k].L[h]):null),
         lineStyle:{width:2.4,color:col},itemStyle:{color:col},areaStyle:{color:col+"14"}}))
@@ -1710,7 +1969,7 @@ function renderInfraDetail(sel){
   $("infra-detail-title").textContent=c.nm;
   $("infra-detail-sub").innerHTML=`${c.lines} líneas · <b style="color:${c.vel<15?'#fb7185':'#34d399'}">${c.vel} km/h</b> · infra exclusiva ${Math.round(c.cov*100)}%`;
   const th=TH(), horas=[...Array(24).keys()].filter(h=>h>=5&&h<=23), x=horas.map(h=>h+"h");
-  const series=[["L","Laborable","#22d3ee"],["S","Sábado","#f5a524"],["D","Domingo","#94a3b8"]].map(([k,nm,col])=>({
+  const series=[["L","Laborable",cssv("--c6")],["S","Sábado",cssv("--infra-pistabus")],["D","Domingo",cssv("--infra-mixto")]].map(([k,nm,col])=>({
     name:nm,type:"line",smooth:true,symbol:"none",connectNulls:false,
     data:horas.map(h=>(c.flujo[k]&&c.flujo[k][h])?Math.round(c.flujo[k][h]):null),
     lineStyle:{width:k==="L"?2.6:1.8,color:col},itemStyle:{color:col},areaStyle:k==="L"?{color:col+"18"}:undefined}));
@@ -1803,7 +2062,7 @@ function renderVelCiclo(){
     const c = (iCoords[idx]) || (rCoords[idx]);
     if(!c){_vcClearMarker();return;}
     if(_vcMarker) _vcMarker.setLatLng([c[0],c[1]]);
-    else { _vcMarker=L.circleMarker([c[0],c[1]],{radius:8,color:"#fff",fillColor:"#f43f5e",fillOpacity:1,weight:2}).addTo(lmap); }
+    else { _vcMarker=L.circleMarker([c[0],c[1]],{radius:8,color:"#fff",fillColor:cssv("--critical"),fillOpacity:1,weight:2}).addTo(lmap); }
   });
   vcChart.on("globalout",_vcClearMarker);
   setTimeout(()=>vcChart.resize(),60);
@@ -1821,7 +2080,7 @@ function drawExcesosMap(){
   if(fC) filtered=filtered.filter(e=>inComuna(e[0],e[1]));
   if(!filtered.length){setCoverLegend("exc");return;}
   for(const e of filtered){
-    const kmh=e[3], col=kmh>=100?"#dc2626":kmh>=85?"#f87171":"#fbbf24";
+    const kmh=e[3], col=kmh>=100?cssv("--critical"):kmh>=85?cssv("--critical"):cssv("--warning");
     L.circleMarker([e[0],e[1]],{radius:5,color:col,fillColor:col,fillOpacity:0.8,weight:1})
       .bindTooltip(`<b>⚠ ${kmh} km/h</b><br>Línea ${e[2]}`,{direction:"top"})
       .addTo(coverLayer);
@@ -1878,7 +2137,7 @@ const MXc = 111320*Math.cos(CITY.lat0*Math.PI/180);
 function chileHour(){ try{ if(LIVE&&LIVE.snapshot_utc){ return (new Date(LIVE.snapshot_utc).getUTCHours()+20)%24; } }catch(e){} return (new Date().getUTCHours()+20)%24; }
 function nearTerminal(lat,lon,L){ const tl=TLIN[L]; if(!tl||!tl.puntos) return false;
   for(const t of tl.puntos){ if(t.tipo!=="terminal") continue; const dy=(lat-t.lat)*110540, dx=(lon-t.lon)*MXc; if(dx*dx+dy*dy<=150*150) return true; } return false; }
-const semColor = r => r==null?"#94a1ba": r>=0.7?"#34d399": r>=0.4?"#fbbf24":"#fb7185";
+const semColor = r => r==null?cssv("--nodata"): r>=0.7?cssv("--good"): r>=0.4?cssv("--warning"):cssv("--critical");
 function renderOpNow(){
   const card=$("opnow-card"); if(!card) return;
   card.style.display="none"; return;   // ELIMINADO: recuadro "En calle/terminal/detenidos" (no sincronizado con los gauges de arriba, redundante)
@@ -1975,7 +2234,7 @@ function drawLiveBuses(){
     n++;
     // F3: chevron orientado por rumbo; mv=0 → punto compacto sin rotar
     new BusMarker([lat,lon],{renderer:liveCanvas, radius: mv?3.6:2.8, weight:0,
-      fillColor: mv?"#22d3ee":"#f59e0b", fillOpacity: mv?0.95:0.7, brg, mv})
+      fillColor: mv?cssv("--c6"):cssv("--c3"), fillOpacity: mv?0.95:0.7, brg, mv})
       .bindTooltip(
         `<b>Línea ${ln||"—"}</b> · ${spd} km/h${mv?"":" · detenido"}`+
         (mv?`<br><span style="color:var(--dim);font-size:10.5px">rumbo ${Math.round(brg)}°</span>`:""),
@@ -2222,14 +2481,14 @@ function drawTerminales(){
   // (excluidos de detención, no cuentan como terminal). Marcador cyan tenue.
   (TERMCONF.retornos||[]).forEach(t=>{
     if(!inComuna(t.lat,t.lon)) return;
-    L.circleMarker([t.lat,t.lon],{renderer:coverCanvas,radius:6,weight:1.5,color:"#22d3ee",fillColor:"#22d3ee",fillOpacity:.2})
+    L.circleMarker([t.lat,t.lon],{renderer:coverCanvas,radius:6,weight:1.5,color:cssv("--c6"),fillColor:cssv("--c6"),fillOpacity:.2})
       .bindTooltip(`<b>Punto de retorno</b>${t.name?" · "+t.name:""}<br>Líneas: ${(t.lineas||[]).join(", ")}<br>fin de ruta con espera breve — no es terminal formal (excluido de detención)`,{sticky:true}).addTo(coverLayer);
   });
   // TERMINALES formales (verdad manual): verde, numerados 1..N (campo n).
   (TERMCONF.confirmados||[]).forEach((t,i)=>{
     if(!inComuna(t.lat,t.lon)) return;
     const num=t.n||(i+1);
-    L.circleMarker([t.lat,t.lon],{renderer:coverCanvas,radius:11,weight:2,color:"#064e2b",fillColor:"#22c55e",fillOpacity:.6})
+    L.circleMarker([t.lat,t.lon],{renderer:coverCanvas,radius:11,weight:2,color:"#064e2b",fillColor:cssv("--good"),fillOpacity:.6})
       .bindTooltip(`<b>#${num} · Terminal</b>${t.name?" · "+t.name:""}<br>Líneas: ${(t.lineas||[]).join(", ")}`,{sticky:true}).addTo(coverLayer);
     L.marker([t.lat,t.lon],{interactive:false,zIndexOffset:600,icon:L.divIcon({className:"term-num",
       html:`<div style="font:700 10px/15px var(--font-data,monospace);color:#052e16;background:#fff;border:1.5px solid #052e16;border-radius:9px;min-width:16px;height:16px;padding:0 2px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.5)">${num}</div>`,
@@ -2258,7 +2517,7 @@ function drawCoverage(mode){
       ? dinColor(_dinValueFor(p))                                         // P_total (sistema) o frac_linea (vista línea)
       : state.coverSub==="od"
       ? odColor(p.cob_od ? p.cob_od[state.periodo] : null)
-      : lineMode ? (nseColors[nseTercil(p.nse)]||"#64748b") : cobColor(p.cob_est);
+      : lineMode ? (nseColors[nseTercil(p.nse)]||cssv("--infra-none")) : cobColor(p.cob_est);
     else if(mode==="trans") col = labColor(p.lab ? p.lab.dir : null);    // TRANSBORDO: % de viajes-trabajo con UNA sola línea (Censo); verde=directo, rojo=exige transbordo/inalcanzable
     else if(mode==="wait") col = waitColor(p.waite ? p.waite[state.periodo] : (p.wait ? p.wait[state.periodo] : null));  // espera efectiva al próximo bus (sin destino), fallback a media simple
     else if(mode==="salud") col = accSColor(p.salud);
@@ -2272,30 +2531,32 @@ function drawCoverage(mode){
     const tipLab = lb
       ? `viajes-trabajo (TP, Censo 2024)${p.lab_comuna?` · ${p.lab_comuna}`:""}: <b>${lb.dir}%</b> con una línea · ${lb.tr}% con transbordo · <b>${lb.no}% inalcanzable</b>`
       : "sin dato de viajes-trabajo";
+    const _mzh = `${NF.format(mzHog(p))} ${HOGL()}`;   // padrón de la manzana, ya resuelto hog→n + rótulo
     const tip = (mode==="trans")
-      ? `${NF.format(p.hog??0)} hogares<br>${tipLab}`
+      ? `${_mzh}<br>${tipLab}`
       : (mode==="cover" && state.coverSub==="din")
       ? (()=>{ const v=_dinValueFor(p); const nL=(p.cob_lineas||[]).length;
           if(state.linea!=="TODAS"){
             const fL = (DINL?.lineas?.[state.linea]?.frac?.[per]) ?? null;
             const fObs = (DINL?.lineas?.[state.linea]?.f_obs?.[per]) ?? null;
             const H = (fObs && fObs>0) ? (60/fObs) : null;
-            return `${NF.format(p.hog??0)} hogares · línea ${state.linea} · ${periodoLbl(per)}<br>`+
+            return `${_mzh} · línea ${state.linea} · ${periodoLbl(per)}<br>`+
                    `frecuencia: <b>${fObs==null?"—":fObs.toFixed(1)} bus/h</b> · headway ${H==null?"—":H.toFixed(1)+" min"}<br>`+
                    `cobertura: <b>${fL==null?"—":(fL*100).toFixed(0)+"%"} del tiempo</b>`;
           }
-          return `${NF.format(p.hog??0)} hogares · ${nL} línea${nL===1?"":"s"} · ${periodoLbl(per)}<br>`+
+          return `${_mzh} · ${nL} línea${nL===1?"":"s"} · ${periodoLbl(per)}<br>`+
                  `cobertura dinámica: <b>${v==null?"—":(v*100).toFixed(0)+"% del tiempo</b> (P_total)"}`;
         })()
       : (mode==="cover" && state.coverSub==="od")
-      ? (()=>{ const r=p.cob_od?p.cob_od[per]:null; const pct=r==null?null:Math.round(100*r/odMax()); return `${NF.format(p.hog??0)} hogares · ${periodoLbl(per)}<br>cobertura oferta/demanda: <b>${pct==null?"sin servicio":pct+"%"}</b> del nivel mejor cubierto`; })()
+      ? (()=>{ const r=p.cob_od?p.cob_od[per]:null; const pct=r==null?null:Math.round(100*r/odMax()); return `${_mzh} · ${periodoLbl(per)}<br>cobertura oferta/demanda: <b>${pct==null?"sin servicio":pct+"%"}</b> del nivel mejor cubierto`; })()
       : (mode==="cover" && lineMode)
-      ? `${NF.format(p.hog??0)} hogares · línea ${state.linea}<br>NSE: <b>${nseLabel(nseTercil(p.nse))}</b> · avalúo ${NF.format(p.nse||0)} CLP/m²`
+      ? `${_mzh} · línea ${state.linea}<br>NSE: <b>${nseLabel(nseTercil(p.nse))}</b>${p.nse?` · avalúo ${NF.format(p.nse)} CLP/m²`:""}`
       : (mode==="cover")
-      ? `${NF.format(p.hog??0)} hogares · acceso ${p.acc} min<br>cobertura estática: <b>${p.cob_est??"—"}%</b> de la manzana a ≤300 m de la red`
+      ? `${_mzh} · acceso ${p.acc} min<br>cobertura estática: <b>${p.cob_est??"—"}%</b> de la manzana a ≤300 m de la red`
       : (mode==="wait")
-      ? `${NF.format(p.n)} viviendas · ${periodoLbl(per)}<br>espera al próximo bus: <b>${we==null?"sin servicio":we+" min"}</b> (efectiva, con apelotonamiento) · media teórica ${wf==null?"—":wf+" min"}`
-      : `${NF.format(p.n)} viviendas · acceso ${p.acc} min · espera ${wf==null?"sin servicio":wf+" min"}<br>a salud ${p.salud??"—"} min · a educación ${p.edu??"—"} min`;
+      // `n` es POBLACIÓN (n_per del Censo), no viviendas: el rótulo decía "viviendas" y medía personas.
+      ? `${NF.format(p.n??0)} habitantes · ${periodoLbl(per)}<br>espera al próximo bus: <b>${we==null?"sin servicio":we+" min"}</b> (efectiva, con apelotonamiento) · media teórica ${wf==null?"—":wf+" min"}`
+      : `${NF.format(p.n??0)} habitantes · acceso ${p.acc} min · espera ${wf==null?"sin servicio":wf+" min"}<br>a salud ${p.salud??"—"} min · a educación ${p.edu??"—"} min`;
     const fop = .55;
     rings.forEach(r=>{
       L.polygon(r.map(c=>[c[1],c[0]]),{renderer:coverCanvas,stroke:false,fillColor:col,fillOpacity:fop})
@@ -2356,7 +2617,7 @@ function setCoverLegend(mode){
   const NEU = `<span class="grad" style="background:#64748b;opacity:.5"></span>`;
   const txt = (mode==="cover" && state.coverSub==="din") ? [`Cobertura dinámica · ${periodoLbl(state.periodo)}`,GYR,`<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>% del tiempo cubierto por algún bus (modelo cápsula 2 min + 300 m) · cambia con el período</span>`]
     : (mode==="cover" && state.coverSub==="od") ? [`Cobertura oferta/demanda · ${periodoLbl(state.periodo)}`,GYR,`<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>capacidad ÷ viajes generados · 100% = zona residencial mejor cubierta (las mejor conectadas), no el centro · reparto por demanda</span>`]
-    : (mode==="cover" && state.linea!=="TODAS") ? [`NSE hogares cubiertos · Línea ${state.linea}`,`<span class="grad" style="background:linear-gradient(90deg,#fb923c 33%,#94a3b8 33% 66%,#2dd4bf 66%)"></span>`,"<span class='lbls'><i>bajo</i><i>medio</i><i>alto</i></span><span class='par'>terciles de avalúo fiscal del suelo (CLP/m²) — solo manzanas cubiertas a ≤300 m</span>"]
+    : (mode==="cover" && state.linea!=="TODAS") ? [`NSE ${HOGL()} cubiertos · Línea ${state.linea}`,`<span class="grad" style="background:linear-gradient(90deg,#fb923c 33%,#94a3b8 33% 66%,#2dd4bf 66%)"></span>`,"<span class='lbls'><i>bajo</i><i>medio</i><i>alto</i></span><span class='par'>terciles de avalúo fiscal del suelo (CLP/m²) — solo manzanas cubiertas a ≤300 m</span>"]
     : mode==="cover" ? ["Cobertura estática (≤300 m de la red)",GYR,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>% de la manzana dentro del área de influencia 300 m de los recorridos</span>"]
     : mode==="trans" ? ["Transbordo: viajes-trabajo con UNA línea (Censo 2024)",GYR,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>verde = llega directo con una línea · rojo = exige transbordo o es inalcanzable</span>"]
     : mode==="wait" ? [`Espera al próximo bus · ${periodoLbl(state.periodo)} (min)`,RYG,"<span class='lbls'><i>0</i><i>3</i><i>6+</i></span><span class='par'>manzana = espera efectiva al próximo bus (con apelotonamiento) · ● paradero = espera ahí (hover)</span>"]
@@ -2427,7 +2688,7 @@ function renderMapa(){
     const ps = PAR[state.linea]||[];
     ps.forEach(s=>{
       L.circleMarker([s[0],s[1]],{radius:_isLive?3.2:2.5,color:"#0b1220",weight:_isLive?1:0.8,
-        fillColor:_isLive?"#e2e8f0":cssv("--ref"),fillOpacity:_isLive?0.95:0.8})
+        fillColor:_isLive?cssv("--text-hi"):cssv("--ref"),fillOpacity:_isLive?0.95:0.8})
         .bindTooltip(s[2],{direction:"top"}).addTo(stopLayer);
     });
     if(_isLive){
@@ -2473,11 +2734,15 @@ function renderMapa(){
     } else {
       const dinp = R.cob_din && R.cob_din.por_periodo && R.cob_din.por_periodo[state.periodo];
       const odp = R.cob_od && R.cob_od.por_periodo && R.cob_od.por_periodo[state.periodo];
+      // `pct_hog_ge_umbral` / `cob_est.pct_hogares_cubiertos` se llaman "hog" en el JSON pero cuentan lo
+      // que la capa tenga: en una ciudad sin SII son PERSONAS (medido en Antofagasta: hog_total = 388.478
+      // = Σn). El rótulo se resuelve con cobUnit(), y si el % no viene se degrada a "—".
+      const _ce = cobEstPct();
       const coverBadge = state.coverSub==="din"
-          ? `${dinp?dinp.pct_hog_ge_umbral:"—"}% de los hogares con cobertura dinámica ≥50% del tiempo en ${periodoLbl(state.periodo)} · media P_total ${dinp?(dinp.media_p_total*100).toFixed(1)+"%":"—"}`
+          ? `${dinp&&dinp.pct_hog_ge_umbral!=null?dinp.pct_hog_ge_umbral:"—"}% de los ${HOGL()} con cobertura dinámica ≥50% del tiempo en ${periodoLbl(state.periodo)} · media P_total ${dinp&&dinp.media_p_total!=null?(dinp.media_p_total*100).toFixed(1)+"%":"—"}`
           : state.coverSub==="od"
           ? `oferta/demanda en ${periodoLbl(state.periodo)} · 100% = zona residencial mejor cubierta (no el centro atractor) · rojo = déficit relativo`
-          : `${(R.cob_est&&R.cob_est.pct_hogares_cubiertos)??"—"}% de los hogares a ≤300 m de la red (buffer sobre el recorrido oficial)`;
+          : `${_ce.pct??"—"}% de los ${HOGL()} a ≤300 m de la red (buffer sobre el recorrido oficial)${_ce.derivado?" · calculado desde las manzanas":""}`;
       const badgeSys = {cover: coverBadge,
         trans:`${(R.lab&&R.lab.dir)??"—"}% de los viajes-trabajo se hacen con UNA línea · ${(R.lab&&R.lab.tr)??"—"}% exige transbordo · ${(R.lab&&R.lab.no)??"—"}% inalcanzable (Censo 2024)`,
         wait:`espera efectiva al próximo bus ${(R.waite_medio&&R.waite_medio[state.periodo])??"—"} min · frecuencia real observada + apelotonamiento · por manzana, sin destino · cambia con el período`,
@@ -2499,7 +2764,7 @@ function renderMapa(){
 }
 
 /* ---------- relato dinámico del mapa (qué busca el KPI + lectura de datos del ámbito) ---------- */
-function scopeWavg(getter){            // promedio ponderado por viviendas sobre las manzanas del ámbito
+function scopeWavg(getter){            // promedio ponderado por POBLACIÓN (p.n) sobre las manzanas del ámbito
   if(!COB||!COB.features) return null;
   let sw=0, n=0;
   for(const f of COB.features){ const p=f.properties; if(!inComuna(p.cy,p.cx)) continue;
@@ -2630,7 +2895,7 @@ function renderLineaKpis(){
   COB.features.forEach(f=>{ const p=f.properties;
     if(showCoverLine && !(p.cob_lineas||[]).includes(state.linea)) return;
     if(showCoverCom && !inComuna(p.cy, p.cx)) return;
-    nMz++; const h=p.hog||0; hog+=h;
+    nMz++; const h=mzHog(p); hog+=h;
     const t=nseTercil(p.nse);
     if(t===0) hbaj+=h; else if(t===1) hmed+=h; else if(t===2) halt+=h;
   });
@@ -2654,12 +2919,16 @@ function renderLineaKpis(){
   const card=(cls,l,v,s)=>`<div class="lk ${cls}"><div class="lab">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`;
   el.style.display="grid";
   const scope = showCoverLine ? `buffer 300 m · línea ${state.linea}` : `manzanas en ${state.comuna}`;
+  // Sin avalúo SII el tercil es -1 en TODAS las manzanas y hbaj/hmed/halt quedan en 0: eso es "sin dato",
+  // no un cero medido (Antofagasta: 3.260/3.260 manzanas con nse = null).
+  const _nseOk = cobHasNSE();
+  const cardNSE = (cls,lab,v,sub) => _nseOk ? card(cls,lab,NF.format(v),sub) : card(cls,lab,"—","sin dato NSE");
   el.innerHTML = [
-    card("b-tot",`${IC.home} Hogares cubiertos`, NF.format(hog), `${nMz} manzanas · ${scope}`),
-    card("b-bajo","NSE bajo", NF.format(hbaj), `${pct(hbaj)}% · ≤ ${t1?NF.format(t1):"—"} CLP/m²`),
-    card("b-med","NSE medio", NF.format(hmed), `${pct(hmed)}% · entre terciles`),
-    card("b-alto","NSE alto", NF.format(halt), `${pct(halt)}% · > ${t2?NF.format(t2):"—"} CLP/m²`),
-    card("b-eff",`${IC.ruler} Hog. por km`, hogkm!=null?NF.format(hogkm):"—", ext?`recorrido ${mainRec} · ${ext} km · desglose por variante abajo`:(showCoverCom?`${comLines.length} líneas en comuna`:"")),
+    card("b-tot",`${IC.home} ${HOGC()} cubiertos`, NF.format(hog), `${nMz} manzanas · ${scope}`),
+    cardNSE("b-bajo","NSE bajo", hbaj, `${pct(hbaj)}% · ≤ ${t1?NF.format(t1):"—"} CLP/m²`),
+    cardNSE("b-med","NSE medio", hmed, `${pct(hmed)}% · entre terciles`),
+    cardNSE("b-alto","NSE alto", halt, `${pct(halt)}% · > ${t2?NF.format(t2):"—"} CLP/m²`),
+    card("b-eff",`${IC.ruler} ${HOGS()==="hog"?"Hog.":"Hab."} por km`, hogkm!=null?NF.format(hogkm):"—", ext?`recorrido ${mainRec} · ${ext} km · desglose por variante abajo`:(showCoverCom?`${comLines.length} líneas en comuna`:"")),
     card("b-cic",`${IC.cycle} Ciclos/bus/día`, ciclos??"—", tc?`tiempo de ciclo ${Math.round(tc)} min · ${flota||"—"} buses`:(showCoverCom?"—":"")),
   ].join("");
 }
@@ -2677,8 +2946,9 @@ function renderCoverTable(){
   const heat=(v,m,rgb)=>`style="background:rgba(${rgb},${(m?Math.min(0.6,(v/m)*0.6):0).toFixed(2)})"`;
   const seg=(v,tot,rgb)=>`style="background:rgba(${rgb},${(tot?Math.min(0.66,(v/tot)*0.66):0).toFixed(2)})"`;
   const velBg=v=>v?`style="background:hsla(${(Math.max(0,Math.min((v-12)/7,1))*120).toFixed(0)},70%,45%,.42)"`:'';
-  let html=`<div class="cap">Cobertura de hogares por recorrido (manzanas Censo a ≤300 m del trazado). <b>Vel</b> = velocidad operacional (rojo lento / verde rápido). <b>Hog/km</b> = hogares ÷ extensión. NSE por avalúo: <b style="color:#fb923c">bajo</b> · <b style="color:#94a3b8">medio</b> · <b style="color:#2dd4bf">alto</b> (terciles).</div>`;
-  html+=`<table><thead><tr><th class="l">Línea</th><th class="l">Rec</th><th>Ext<br>(km)</th><th>Vel<br>(km/h)</th><th>Hogares</th><th>Hog/km</th><th>NSE<br>bajo</th><th>NSE<br>medio</th><th>NSE<br>alto</th></tr></thead><tbody>`;
+  const _u = HOGC(), _ul = HOGL(), _us = HOGS();     // rótulo según lo que la capa mide de verdad
+  let html=`<div class="cap">Cobertura de ${_ul} por recorrido (manzanas Censo a ≤300 m del trazado). <b>Vel</b> = velocidad operacional (rojo lento / verde rápido). <b>${_us}/km</b> = ${_ul} ÷ extensión. NSE por avalúo: <b style="color:#fb923c">bajo</b> · <b style="color:#94a3b8">medio</b> · <b style="color:#2dd4bf">alto</b> (terciles).</div>`;
+  html+=`<table><thead><tr><th class="l">Línea</th><th class="l">Rec</th><th>Ext<br>(km)</th><th>Vel<br>(km/h)</th><th>${_u}</th><th>${_us}/km</th><th>NSE<br>bajo</th><th>NSE<br>medio</th><th>NSE<br>alto</th></tr></thead><tbody>`;
   let prev=null;
   rows.forEach(r=>{
     const tot=(r.hog_baj+r.hog_med+r.hog_alt)||1;
@@ -2738,7 +3008,7 @@ function renderNarrative(){
     const v=scopeWavg(p=>p.cob_din&&p.cob_din[per]);
     txt=`<b>Cobertura dinámica</b>: ¿qué tan seguido pasa un bus cerca de mí? Modelo: cada bus cubre una <b>cápsula de 2 min + 300 m</b> al pasar por su trazado, así que <code>frac = min(1, f/30)</code> donde <code>f</code> es la frecuencia observada en bus/h. Por manzana combina todas las líneas que la cubren (P_total = 1 − Π(1−frac_i)). En <b>${periodoLbl(per)}</b>: verde = el bus pasa casi continuamente; rojo = pasa raramente. ${v!=null?`Media en ${amb}: <b>${(v*100).toFixed(0)}%</b> del tiempo. `:""}Compara <b>Punta AM con Noche</b>: aunque el trazado exista, de noche la frecuencia cae y la cobertura efectiva se desploma.`;
   } else if(M==="cover" && state.coverSub==="od"){
-    txt=`<b>Cobertura oferta/demanda</b>: contrasta la <b>capacidad ofrecida</b> con la <b>demanda de viajes-TP</b> que genera cada manzana (hogares × tasa de generación EOD por hora). Para no doble-contar la capacidad compartida del corredor, se <b>reparte por demanda</b>. Se muestra <b>relativo a una zona residencial bien cubierta</b> (las zonas mejor conectadas = 100%), <b>no</b> al centro de Concepción — que por ser atractor concentra todas las líneas y distorsionaría la comparación de generación. En <b>${periodoLbl(per)}</b>: verde = bien servida frente a su demanda; rojo = oferta corta. Cruza con la Noche para ver dónde la demanda persiste pero la oferta cae.`;
+    txt=`<b>Cobertura oferta/demanda</b>: contrasta la <b>capacidad ofrecida</b> con la <b>demanda de viajes-TP</b> que genera cada manzana (${HOGL()} × tasa de generación EOD por hora). Para no doble-contar la capacidad compartida del corredor, se <b>reparte por demanda</b>. Se muestra <b>relativo a una zona residencial bien cubierta</b> (las zonas mejor conectadas = 100%), <b>no</b> al centro de la ciudad — que por ser atractor concentra todas las líneas y distorsionaría la comparación de generación. En <b>${periodoLbl(per)}</b>: verde = bien servida frente a su demanda; rojo = oferta corta. Cruza con la Noche para ver dónde la demanda persiste pero la oferta cae.`;
   } else if(M==="cover"){
     const v=scopeWavg(p=>p.cob_est);
     txt=`<b>Cobertura estática</b> mide qué parte del territorio construido queda dentro del <b>área de influencia de 300 m</b> de los recorridos (buffer sobre el trazado oficial). Verde = la manzana está cubierta por la red; rojo = fuera del alcance peatonal de cualquier recorrido. ${v!=null?`En ${amb}, en promedio el <b>${v.toFixed(0)}%</b> de cada manzana está cubierto. `:""}Es la cobertura geográfica pura: aún no considera con qué frecuencia pasan los buses (eso es la cobertura dinámica – oferta).`;
@@ -2789,7 +3059,7 @@ function renderRanking(){
   const sel=$("rank-cat-sel");
   if(sel){
     sel.innerHTML = RANK_CATS.map(c=>{ const on=c.k===cat.k;
-      return `<b data-rc="${c.k}" title="${c.desc}" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:7px;font-size:12px;white-space:nowrap;${on?`background:${c.good?"var(--live-tint)":"#fb718522"};color:${c.good?"var(--live)":"#fb7185"};font-weight:700`:"color:var(--muted)"}">${c.ic} ${c.lab}</b>`;
+      return `<b data-rc="${c.k}" title="${c.desc}" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:7px;font-size:12px;white-space:nowrap;${on?`background:${c.good?"var(--live-tint)":"#fb718522"};color:${c.good?"var(--live)":cssv("--critical")};font-weight:700`:"color:var(--muted)"}">${c.ic} ${c.lab}</b>`;
     }).join("");
     sel.querySelectorAll("b[data-rc]").forEach(el=>el.onclick=()=>{ state.rankCat=el.dataset.rc; renderRanking(); });
   }
@@ -2810,7 +3080,7 @@ function renderRanking(){
   rows.sort((a,b)=> cat.asc ? a.v-b.v : b.v-a.v);
   rows=rows.slice(0,12);
   const vals=rows.map(r=>r.v), mn=Math.min(...vals), mx=Math.max(...vals), rng=(mx-mn)||1;
-  const col=cat.good?"var(--live)":"#fb7185";
+  const col=cat.good?"var(--live)":cssv("--critical");
   box.innerHTML = rows.map((r,i)=>{
     const t=(r.v-mn)/rng, bw=Math.round(100*(cat.asc?(1-t):t));   // #1 = barra más llena
     return `<div class="rank-row" data-l="${r.id}">
@@ -2835,7 +3105,7 @@ const RANK_CATS = [
 ];
 
 const DIAS = {L:"Laborable", S:"Sábado", D:"Domingo"};
-const cumpCol = c => c==null ? "#64748b" : c>=120 ? "#22d3ee" : c>=95 ? "#34d399" : c>=80 ? "#fbbf24" : "#fb7185";
+const cumpCol = c => c==null ? cssv("--infra-none") : c>=120 ? cssv("--c6") : c>=95 ? cssv("--good") : c>=80 ? cssv("--warning") : cssv("--critical");
 function cumpBar(c){
   const col = cumpCol(c), w = c==null?0:Math.min(c,120)/120*100;
   return `<span class="bar" style="flex:0 0 84px;height:7px;border-radius:4px;background:var(--track);overflow:hidden;position:relative">
@@ -2899,13 +3169,13 @@ function renderCumpSem(){
   const ys = serie.map(p=>p[state.csVar]);
   const pr = (L.prog||{})[state.csDia]||{};
   // color por cumplimiento si es %
-  const colorOf = y => !vc.pct||y==null ? cssv("--ref") : y>=120?cssv("--live"):y>=95?"#34d399":y>=80?cssv("--warn"):"#fb7185";
+  const colorOf = y => !vc.pct||y==null ? cssv("--ref") : y>=120?cssv("--live"):y>=95?cssv("--good"):y>=80?cssv("--warn"):cssv("--critical");
   const pts = ys.map((y,i)=>({value:y, itemStyle:{color:colorOf(y)}}));
   if(!csChart) csChart = echarts.init($("cs-chart"));
   const th = TH();
   const markLines = vc.ref.length ? {silent:true,symbol:"none",lineStyle:{type:"dashed"},data:[
-      {yAxis:80,lineStyle:{color:"rgba(251,113,133,.6)"},label:{formatter:"80% mínimo",color:"#fb7185",position:"insideEndTop",fontSize:10}},
-      {yAxis:100,lineStyle:{color:"rgba(52,211,153,.5)"},label:{formatter:"100%",color:"#34d399",position:"insideEndTop",fontSize:10}}
+      {yAxis:80,lineStyle:{color:"rgba(251,113,133,.6)"},label:{formatter:"80% mínimo",color:cssv("--critical"),position:"insideEndTop",fontSize:10}},
+      {yAxis:100,lineStyle:{color:"rgba(52,211,153,.5)"},label:{formatter:"100%",color:cssv("--good"),position:"insideEndTop",fontSize:10}}
     ]} : undefined;
   csChart.setOption({
     textStyle:{fontFamily:th.font,color:th.tx},
@@ -2932,7 +3202,7 @@ function renderEquidad(){
   const d = (EQ.lineas||{})[state.linea];
   if(state.linea==="TODAS" || !d){ card.style.display="none"; return; }
   card.style.display="";
-  const g=d.gini, col = g>=0.4?"#fb7185":g>=0.25?"#fbbf24":"#34d399";
+  const g=d.gini, col = g>=0.4?cssv("--critical"):g>=0.25?cssv("--warning"):cssv("--good");
   $("eq-gini").textContent = `Gini ${g.toFixed(2)}`;
   $("eq-gini").style.cssText = `margin-left:auto;background:${col}22;color:${col}`;
   const th=TH();
@@ -2971,7 +3241,7 @@ function renderNseGap(){
   const card=$("nse-gap-card");
   // territorial: sistema o comuna (no en vista de línea)
   if(state.linea!=="TODAS" || state.vista!=="normal" || !COB){ card.style.display="none"; return; }
-  // quintiles de NSE ponderados por viviendas (filtrando a la comuna si hay una elegida)
+  // quintiles de NSE ponderados por POBLACIÓN (p.n) (filtrando a la comuna si hay una elegida)
   const cells = COB.features.filter(f=>inComuna(f.properties.cy, f.properties.cx))
     .map(f=>f.properties).filter(p=>p.nse>0 && p.n>0).sort((a,b)=>a.nse-b.nse);
   if(cells.length<25){ card.style.display="none"; return; }   // muy pocas celdas para quintiles
@@ -2997,13 +3267,14 @@ function renderNseGap(){
     yAxis:[{type:"value",name:"% desierto",axisLabel:{color:th.mut},splitLine:{lineStyle:{color:th.grid}}},
            {type:"value",name:"min",position:"right",axisLabel:{color:th.mut},splitLine:{show:false}}],
     series:[
-      {name:"% en desierto",type:"bar",data:desierto,barWidth:"46%",itemStyle:{color:"#fb7185",borderRadius:[4,4,0,0]}},
+      {name:"% en desierto",type:"bar",data:desierto,barWidth:"46%",itemStyle:{color:cssv("--critical"),borderRadius:[4,4,0,0]}},
       {name:"Acceso medio",type:"line",yAxisIndex:1,data:acceso,smooth:true,symbol:"circle",symbolSize:7,lineStyle:{width:2.5,color:cssv("--ref")},itemStyle:{color:cssv("--ref")}}
     ]
   }, true);
   setTimeout(()=>nseChart.resize(),60);
   const gap = (desierto[0]-desierto[4]).toFixed(1);
-  $("nse-foot").innerHTML = `Quintiles de viviendas por NSE (avalúo m²). Brecha Q1–Q5 en desierto de transporte: <b style="color:${gap>0?'#fb7185':'#34d399'}">${gap>0?'+':''}${gap} pts</b> ${gap>0?'(las zonas vulnerables están peor cubiertas)':'(sin penalización a las vulnerables)'}.`;
+  // Ponderan por `p.n`, que es POBLACIÓN (n_per del Censo): el rótulo decía "viviendas".
+  $("nse-foot").innerHTML = `Quintiles de habitantes por NSE (avalúo m²). Brecha Q1–Q5 en desierto de transporte: <b style="color:${gap>0?'#fb7185':'#34d399'}">${gap>0?'+':''}${gap} pts</b> ${gap>0?'(las zonas vulnerables están peor cubiertas)':'(sin penalización a las vulnerables)'}.`;
 }
 
 /* ---------- KPI línea: operación (ciclo/headway/bunching/regularidad) ---------- */
@@ -3013,7 +3284,7 @@ function renderOperacion(){
   card.style.display="";
   const q=calcCalidad(state.linea);
   const opcard=(l,v,s)=>`<div class="kpi"><div class="lab">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`;
-  const bunCol = o.bunching>=12?"#fb7185":o.bunching>=7?"#fbbf24":"#34d399";
+  const bunCol = o.bunching>=12?cssv("--critical"):o.bunching>=7?cssv("--warning"):cssv("--good");
   $("op-stats").innerHTML = [
     opcard("Tiempo de ciclo", fmt(o.ciclo_med)+" min", "ida + vuelta (aprox)"),
     opcard("Intervalo (headway)", (o.hw_med??"—")+" min", "entre salidas / recorrido"),
@@ -3065,7 +3336,7 @@ function drawVarCharts(){
       xAxis:{type:"category",data:xs2,axisLabel:{color:th.mut,fontSize:9},axisLine:{lineStyle:{color:th.axis}}},
       yAxis:{type:"value",name:"desp/día",axisLabel:{color:th.mut},splitLine:{lineStyle:{color:th.grid}}},
       series:[ vt?{name:"Variante "+curVar,type:"line",data:vt.dd,smooth:true,symbol:"circle",symbolSize:5,connectNulls:true,lineStyle:{width:2.6,color:cssv("--live")},itemStyle:{color:cssv("--live")}}:null,
-               lt?{name:"Línea "+state.linea,type:"line",data:lt.dd,smooth:true,symbol:"none",connectNulls:true,lineStyle:{width:2,color:"#94a1ba",type:"dashed"},itemStyle:{color:"#94a1ba"}}:null ].filter(Boolean)
+               lt?{name:"Línea "+state.linea,type:"line",data:lt.dd,smooth:true,symbol:"none",connectNulls:true,lineStyle:{width:2,color:cssv("--nodata"),type:"dashed"},itemStyle:{color:cssv("--nodata")}}:null ].filter(Boolean)
     },true);
     setTimeout(()=>varTrendChart.resize(),60);
   }
@@ -3074,7 +3345,7 @@ function drawVarCharts(){
 }
 
 /* ---------- KPI: índice sintético de calidad por línea ---------- */
-const calCol = s => s>=70?"#34d399":s>=50?"#fbbf24":"#fb7185";
+const calCol = s => s>=70?cssv("--good"):s>=50?cssv("--warning"):cssv("--critical");
 function calcCalidad(l){
   const c=(CUMP.lineas||{})[l], o=(OP.lineas||{})[l], tc=(T.cells||{})[`TODAS|${l}`];
   const freq = c&&c.cumpl&&c.cumpl.L!=null ? Math.min(c.cumpl.L,100) : null;
@@ -3123,7 +3394,7 @@ function renderRankingView(){
   const vsel=RANK_VARS.map(v=>`<b data-rv="${v[0]}" class="${vk===v[0]?"on":""}">${v[1]}</b>`).join("");
   $("special-view").innerHTML=`<section class="widget"><div class="widget-h">
      <span class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>
-     <div class="min-w-0"><h3>Ranking de comunas · ${vdef[1]}</h3><span class="sub">ordena el Antofagasta por la variable elegida${vk==="vel"?` · ${periodoLbl(state.periodo)}`:""}</span></div>
+     <div class="min-w-0"><h3>Ranking de comunas · ${vdef[1]}</h3><span class="sub">ordena ${CITY.nombre} por la variable elegida${vk==="vel"?` · ${periodoLbl(state.periodo)}`:""}</span></div>
      <div class="seg" id="rank-var" style="margin-left:auto;flex-wrap:wrap">${vsel}</div></div>
      <div class="widget-b"><div id="rankview-chart" style="height:440px"></div><div class="hint" id="rankview-foot" style="margin-top:6px"></div></div></section>`;
   $("rank-var").querySelectorAll("b").forEach(el=>el.onclick=()=>{state.rankVar=el.dataset.rv;render();});
@@ -3241,7 +3512,7 @@ function renderHeat(){
     xAxis:{type:"category",data:HORAS,axisLabel:{color:th.mut,fontSize:9},axisLine:{lineStyle:{color:th.axis}},splitArea:{show:false}},
     yAxis:{type:"category",data:yCats,axisLabel:{color:th.tx,fontSize:11},axisLine:{lineStyle:{color:th.axis}}},
     visualMap:{min:0,max:Math.ceil(maxv),calculable:false,orient:"horizontal",left:"center",bottom:2,itemWidth:12,itemHeight:120,
-      inRange:{color:["#0b1220","#143656","#0ea5e9","#34d399","#fbbf24"]},textStyle:{color:th.mut,fontSize:10}},
+      inRange:{color:["#0b1220","#143656","#0ea5e9",cssv("--good"),cssv("--warning")]},textStyle:{color:th.mut,fontSize:10}},
     series:[{type:"heatmap",data,label:{show:false},itemStyle:{borderColor:"rgba(0,0,0,.12)",borderWidth:1},
       emphasis:{itemStyle:{shadowBlur:8,shadowColor:"rgba(0,0,0,.5)"}}}]
   },true);
@@ -3298,7 +3569,7 @@ function renderEvolucion(){
   const valid=serie.filter(x=>x!=null);
   const first=valid[0], last=valid[valid.length-1], delta=last!=null&&first!=null?Math.round((last-first)*10)/10:null;
   const mejor = vdef[3]>0 ? (delta>0) : (delta<0);
-  const col = delta==null||Math.abs(delta)<0.2 ? "#94a1ba" : mejor ? "#34d399" : "#fb7185";
+  const col = delta==null||Math.abs(delta)<0.2 ? cssv("--nodata") : mejor ? cssv("--good") : cssv("--critical");
   const th=TH(); if(evolChart) evolChart.dispose(); evolChart=echarts.init($("evol-chart"));
   evolChart.setOption({
     textStyle:{fontFamily:th.font,color:th.tx},
@@ -3331,7 +3602,7 @@ function renderEvolucion(){
       vb.textContent = "Visor actualizado: "+BUILD+" (hora Chile)";
       if(v.build && v.build!==BUILD) vb.innerHTML += ' · <span class="nueva" onclick="location.reload(true)">⚠ hay una versión más nueva — recargar</span>';
     }).catch(()=>{ const vb=$("vfoot-build"); if(vb) vb.textContent="Visor actualizado: "+BUILD; });
-    applyTheme(document.documentElement.dataset.theme==="light" ? "light" : "dark");
+    applyTheme(document.documentElement.dataset.theme || "dark");   // respeta el tema ya fijado (dark/light o cliente-*), no lo normaliza
     J("comuna_lineas.json").then(d=>{ CLIN=d; buildLineaList($("linea-search")?$("linea-search").value:""); }).catch(()=>{});
     J("cobertura.json").then(d=>{ COB=d; renderNseGap(); if(state.mapMode!=="live") renderMapa();
       if(LIVE && state.vista==="normal" && state.linea==="TODAS" && state.comuna==="TODAS") renderLiveExtras();
@@ -3384,10 +3655,12 @@ function renderEvolucion(){
     J("baseline_var.json").then(d=>{ BVAR=d; if(state.vista==="normal"&&state.linea!=="TODAS") renderVarObserved(); }).catch(()=>{});   // baseline por variante (Bloque 3)
     J("infraestructura.json").then(d=>{ INFRAE=d; if(state.modo==="infra") renderInfra(); else if(state.modo==="demanda") renderDemMap(); }).catch(()=>{});   // observatorio de infraestructura (+ geometría de ejes para el mapa de demanda)
     if(CITY.demanda){   // 3er lente: validaciones del medio de pago (abordajes)
-      J("demanda.json").then(d=>{ DEM=d; if(state.modo==="demanda") renderDemanda(); }).catch(()=>{});
-      J("demanda_eslabon.json").then(d=>{ DEMESL=d; if(state.modo==="demanda") renderDemMap(); }).catch(()=>{});   // nube de puntos (geométrico, Nivel 1)
-      J("demanda_eslabon_p.json").then(d=>{ DEMESLP=d; if(state.modo==="demanda"){ renderDemCtrls(); renderDemMap(); } }).catch(()=>{});   // Nivel 2 (sentido real por patente)
-      J("demanda_perfil.json").then(d=>{ DEMPERF=d; if(state.modo==="demanda") renderDemanda(); }).catch(()=>{});   // perfil de carga por línea (km × pax)
+      // línea seleccionada en modo operación = VISTA DE LÍNEA (Etapa 2): también consume estos JSON → refrescar.
+      const _demLinePage = () => state.linea!=="TODAS" && state.modo==="operacion";
+      J("demanda.json").then(d=>{ DEM=d; if(state.modo==="demanda") renderDemanda(); else if(_demLinePage()) render(); }).catch(()=>{});
+      J("demanda_eslabon.json").then(d=>{ DEMESL=d; if(state.modo==="demanda"||_demLinePage()) renderDemMap(); }).catch(()=>{});   // nube de puntos (geométrico, Nivel 1)
+      J("demanda_eslabon_p.json").then(d=>{ DEMESLP=d; if(state.modo==="demanda"||_demLinePage()){ renderDemCtrls(); renderDemMap(); } }).catch(()=>{});   // Nivel 2 (sentido real por patente)
+      J("demanda_perfil.json").then(d=>{ DEMPERF=d; if(state.modo==="demanda") renderDemanda(); else if(_demLinePage()) render(); }).catch(()=>{});   // perfil de carga por línea (km × pax)
       J("demanda_eje.json").then(d=>{ DEMEJE=d; }).catch(()=>{});   // conservado (carga por eje, no lo usa el mapa)
     }
     J("flujo_ejes.json").then(d=>{ FLUJOEJES=d; if(state.modo==="infra") renderInfra(); }).catch(()=>{});   // flujo buses/h por eje×sentido
