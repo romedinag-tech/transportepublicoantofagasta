@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=238`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=239`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -895,7 +895,7 @@ function renderKPIs(cell){
         return liveBox(sp, val, nrm, pct, opts);
       });
       // 8ª tarjeta: líneas. Sin comparador (no tiene "promedio del día"), mismo formato de arco.
-      cards.push(liveBox({k:"lineas", lab:"Líneas", ic:IC.bus, dir:0, unit:"",
+      cards.push(liveBox({k:"lineas", lab:"Líneas", ic:"🚏", dir:0, unit:"",
                           f:v=>fmt(Math.round(v))}, k.n_lineas, null, null,
                          {hist:true, tip:"Líneas con dato en el período"}));
       $("kpis2").classList.add("kpis-8");
