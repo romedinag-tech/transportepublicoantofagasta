@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=229`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=230`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -3608,7 +3608,21 @@ function renderEvolucion(){
       loadT, J("lineas_geom.json"), J(CITY.comunasGeojson), J("cumplimiento.json"),
       J("paraderos.json").catch(()=>({})), J("cumplimiento_semanal.json").catch(()=>({lineas:{}}))]);
     if(T.hasta){ const pe=$("periodo-pill"); if(pe) pe.textContent = "datos hasta "+T.hasta; }
-    const vd=$("vfoot-data"); if(vd) vd.textContent = "Datos hasta: "+(T.hasta||"—");
+    // Declara la VENTANA COMPLETA, no solo la fecha final: "Datos hasta jun-2025" no dice si hay
+    // un mes o un año detrás, y con un solo mes (Antofagasta: junio 2025, 30 días) las cifras se
+    // leen como si fueran la operación actual de la ciudad. `desde/hasta/dias` los escribe
+    // refresh_historico midiendo el agregado.
+    const vd=$("vfoot-data");
+    if(vd){
+      if(T.desde && T.hasta){
+        const dd = T.dias ? ` · ${T.dias} ${T.dias===1?"día":"días"} con dato` : "";
+        vd.textContent = (T.desde===T.hasta) ? `Datos: ${T.hasta}${dd}`
+                                             : `Datos: ${T.desde} a ${T.hasta}${dd}`;
+        if(T.meses===1) vd.textContent += " · un solo mes";
+      } else {
+        vd.textContent = "Datos hasta: "+(T.hasta||"—");
+      }
+    }
     fetch("data/version.json?t="+Date.now(),{cache:"no-store"}).then(r=>r.json()).then(v=>{
       const vb=$("vfoot-build"); if(!vb) return;
       vb.textContent = "Visor actualizado: "+BUILD+" (hora Chile)";
