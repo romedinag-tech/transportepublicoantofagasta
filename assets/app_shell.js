@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=236`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=237`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -87,13 +87,31 @@ function cobTiene(campo){
   }catch(e){}
   return false;
 }
+function cobDiscrimina(get, minDistintos){
+  /* Un modo temático no se habilita porque el campo EXISTA, sino porque el dato DISCRIMINE.
+     Medido: en una ciudad de UNA comuna el transbordo laboral se degenera — Antofagasta toma 2
+     valores (0 y 94,6) con `tr`=0 en el 100% de las manzanas, y Punta Arenas igual, porque la
+     única distinción posible es "hay o no una línea que sirva la comuna": la misma información
+     que la cobertura estática. El mapa saldría casi uniforme y se leería como un análisis de
+     transbordo que no existe. Temuco sí discrimina (dir 0..92, tr 0..7,2 en 3.269 manzanas). */
+  try{
+    const fs = (COB && (COB.features || COB)) || [];
+    const vis = new Set();
+    for(const f of fs){
+      const v = get(f.properties || f);
+      if(v != null) vis.add(Math.round(v*10));
+      if(vis.size >= (minDistintos||4)) return true;
+    }
+  }catch(e){}
+  return false;
+}
 function mapModes(){
   return [
     ...(CITY.live ? [["live","En vivo"]] : []),
     ["conges","Congestión"], ["cover","Cobertura"], ["wait","Espera"], ["bunch","Bunching"],
     ["det","Detenciones"], ["terms","Terminales"],
     ...(CITY.live ? [["exc","Excesos vel."]] : []),        // capa viva: se alimenta de live.json
-    ...(cobTiene("lab") ? [["trans","Transbordo"]] : []),  // requiere el campo `lab` por manzana
+    ...(cobDiscrimina(p => p.lab && p.lab.dir, 4) ? [["trans","Transbordo"]] : []),
     ...(cobTiene("salud") ? [["salud","Salud"]] : []),
     ...(cobTiene("edu")   ? [["edu","Educación"]] : []),
     ...(cobTiene("nse")   ? [["nse","NSE"]] : []),
