@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=228`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=229`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -3490,8 +3490,15 @@ function renderHeat(){
   const card=$("heat-card");
   if(!sysScope() || (!MESH.length && !DOWH.length)){ card.style.display="none"; return; }
   card.style.display="";
-  const hm=state.heatMode||"mes";
-  $("heat-mode").innerHTML=[["mes","Mes × hora"],["dow","Semana × hora"]].map(([k,l])=>`<b data-h="${k}" class="${hm===k?"on":""}">${l}</b>`).join("");
+  // el modo por defecto era SIEMPRE "mes", pero `flota_mes_hora.json` no existe en las ciudades
+  // portadas (MESH=[]) -> el heatmap se abría vacío y reventaba en addColorStop con 'undefined'
+  // (Math.max() de un arreglo vacío da -Infinity). Si el modo pedido no tiene datos, se cae al que sí.
+  let hm=state.heatMode||"mes";
+  if(hm==="mes" && !MESH.length) hm="dow";
+  if(hm==="dow" && !DOWH.length) hm="mes";
+  $("heat-mode").innerHTML=[["mes","Mes × hora",MESH.length],["dow","Semana × hora",DOWH.length]]
+    .filter(([,,n])=>n)   // no ofrecer un modo sin datos
+    .map(([k,l])=>`<b data-h="${k}" class="${hm===k?"on":""}">${l}</b>`).join("");
   $("heat-mode").querySelectorAll("b").forEach(el=>el.onclick=()=>{state.heatMode=el.dataset.h;renderHeat();});
   const th=TH(); if(heatChart) heatChart.dispose(); heatChart=echarts.init($("heat-chart"));
   let yCats,data,maxv;
@@ -3500,7 +3507,12 @@ function renderHeat(){
     yCats=meses.map(mesLab); data=MESH.map(x=>[x.hora, meses.indexOf(x.mes), Math.round(x.prom)]);
     maxv=Math.max(...MESH.map(x=>x.prom));
   } else {
-    const lab=["","Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+    // `dow` viene en convención BigQuery: 1=DOMINGO … 7=sábado (es lo que produce el pipeline de
+    // GCCP y lo que replica kpi_dow_regularidad). Las etiquetas decían ["","Lun","Mar",…] y con
+    // y=dow-1 rotulaban el domingo como "Lun": TODOS los días salían corridos uno. Verificado
+    // midiendo la actividad de GCCP — dow=1 suma 7.382 (el día más bajo, o sea domingo) y estaba
+    // rotulado "Lun". No cambiar sin volver a medir qué día es el de menos actividad.
+    const lab={1:"Dom",2:"Lun",3:"Mar",4:"Mié",5:"Jue",6:"Vie",7:"Sáb"};
     yCats=[1,2,3,4,5,6,7].map(d=>lab[d]); data=DOWH.map(x=>[x.hora, x.dow-1, Math.round(x.prom)]);
     maxv=Math.max(...DOWH.map(x=>x.prom));
   }
