@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=235`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=236`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -75,7 +75,11 @@ const LIVE_URL = _liveUrl("live.json");
 // oculto; `salud` y `edu`, en cambio, vienen NULOS en las tres (falta materializar los
 // establecimientos). Un flag único no puede decidir por cuatro capas distintas.
 // Ahora cada modo se gatea POR SU PROPIO DATO, medido sobre las manzanas ya cargadas.
-// `trans` sigue amarrado a rich: el transbordo necesita demanda, que no se deriva de la cobertura.
+// `trans` también, desde 2026-09-17: estaba amarrado a `CITY.rich` porque el transbordo dependía de
+// la demanda EOD, pero hoy `kpi_censo_od_laboral.py` + `kpi_censo_acceso_laboral.py` derivan el
+// campo `lab` de cada manzana desde la OD laboral del Censo 2024, que existe para cualquier ciudad
+// de Chile. Medido: 3.260/3.260 manzanas en Antofagasta, 3.878/3.878 en Temuco y 1.865/1.865 en
+// Punta Arenas ya traen `lab`, y el modo seguía oculto por el flag.
 function cobTiene(campo){
   try{
     const fs = (COB && (COB.features || COB)) || [];
@@ -89,7 +93,7 @@ function mapModes(){
     ["conges","Congestión"], ["cover","Cobertura"], ["wait","Espera"], ["bunch","Bunching"],
     ["det","Detenciones"], ["terms","Terminales"],
     ...(CITY.live ? [["exc","Excesos vel."]] : []),        // capa viva: se alimenta de live.json
-    ...(CITY.rich ? [["trans","Transbordo"]] : []),        // requiere demanda/transbordo
+    ...(cobTiene("lab") ? [["trans","Transbordo"]] : []),  // requiere el campo `lab` por manzana
     ...(cobTiene("salud") ? [["salud","Salud"]] : []),
     ...(cobTiene("edu")   ? [["edu","Educación"]] : []),
     ...(cobTiene("nse")   ? [["nse","NSE"]] : []),
@@ -848,33 +852,43 @@ function renderKPIs(cell){
   // Se muestra el DÍA LABORAL TÍPICO EN SU PUNTA, con el sello "histórico" en cada tarjeta.
   if(BASE30 && BASE30.L && Array.isArray(BASE30.L.buses_op)){
     const L = BASE30.L, bins = BASE30.bins || [];
-    // bin de punta = el de mayor flota en ruta (no una hora fija: cada ciudad puntea distinto)
+    // bin de PUNTA = el de mayor flota en ruta. No una hora fija: cada ciudad puntea distinto.
     let ip = -1, mx = -1;
     L.buses_op.forEach((v,i)=>{ if(v!=null && v>mx){ mx=v; ip=i; } });
     if(ip >= 0){
-      const at = a => (Array.isArray(a) && a[ip]!=null) ? a[ip] : null;
-      const nn = v => v==null ? "—" : fmt(Math.round(v));
+      // VENTANA DE OPERACIÓN = bins con al menos 10% de la flota punta. El promedio del día se
+      // calcula SOLO ahí: incluir la madrugada (0 buses, 90% "detenido") hundiría el promedio de
+      // flota e inflaría el de detención, y el arco compararía contra un día que no existe.
+      const act = [];
+      L.buses_op.forEach((v,i)=>{ if(v!=null && v >= mx*0.10) act.push(i); });
+      const prom = k => {
+        const a = L[k]; if(!Array.isArray(a)) return null;
+        const v = act.map(i=>a[i]).filter(x=>x!=null);
+        return v.length ? v.reduce((s,x)=>s+x,0)/v.length : null;
+      };
       const hh = bins[ip] || "";
-      const tip = `Día laboral típico a las ${hh}, del registro GPS histórico`;
+      const tip = `Día laboral típico a las ${hh} · registro GPS histórico`;
+      const opts = {hist:true, normLbl:"día", tip};
+      const cards = LIVE_KPIS.map(sp=>{
+        const a = L[sp.k];
+        const val = (Array.isArray(a) && a[ip]!=null) ? a[ip] : null;
+        const nrm = prom(sp.k);
+        const pct = (val!=null && nrm) ? 100*val/nrm : null;
+        return liveBox(sp, val, nrm, pct, opts);
+      });
+      // 8ª tarjeta: líneas. Sin comparador (no tiene "promedio del día"), mismo formato de arco.
+      cards.push(liveBox({k:"lineas", lab:"Líneas", ic:IC.bus, dir:0, unit:"",
+                          f:v=>fmt(Math.round(v))}, k.n_lineas, null, null,
+                         {hist:true, tip:"Líneas con dato en el período"}));
       $("kpis2").classList.add("kpis-8");
-      $("kpis2").innerHTML = [
-        histCard("Buses en ruta", nn(mx), `máximo del día laboral · ${hh}`, IC.bus, "neutral", tip),
-        histCard("Buses en terminal", nn(at(L.term)), `en punta · ${hh}`, IC.park||IC.bus, "neutral", tip),
-        histCard("Fuera de servicio", nn(at(L.descanso)), `flota sin operar en ese bin`, IC.pause||IC.stop, "neutral", tip),
-        histCard("Sin operar en el día", nn(at(L.inact)), `del registro de flota`, IC.sleep||IC.bus, "neutral", tip),
-        histCard("Velocidad media", k.vel==null?"—":fmt1(k.vel)+" km/h", "efectiva, en ruta", IC.zap,
-                 k.vel==null?"neutral":semHigh(k.vel,22,14), "Promedio de todo el período con dato"),
-        histCard("Tiempo detenido", k.pct_det==null?"—":fmt1(k.pct_det)+" %", "en ruta · excl. terminales", IC.stop,
-                 k.pct_det==null?"neutral":semLow(k.pct_det,18,28), "Promedio de todo el período con dato"),
-        histCard("Frecuencia salida", at(L.freq)==null?"—":fmt(Math.round(at(L.freq)))+"/h", `despachos en punta · ${hh}`, IC.green||IC.bus, "neutral", tip),
-        histCard("Líneas", fmt(k.n_lineas), "operando en el ámbito", IC.bus, "neutral", "Del histórico del período"),
-      ].join("");
-      _kpiNote(`Cifras del <b>día laboral típico</b> en su punta (<b>${hh}</b>), del registro GPS histórico`
+      $("kpis2").dataset.lin = "";                 // invalida el cache de tarjetas de renderLiveKPIs
+      $("kpis2").innerHTML = cards.join("");
+      _kpiNote(`Cifras del <b>día laboral típico</b> en su punta (<b>${hh}</b>) comparadas con el `
+               + `<b>promedio del día de operación</b>, del registro GPS histórico`
                + (CITY.live ? "" : " — esta ciudad no tiene feed en vivo") + ".");
       return;
     }
   }
-  $("kpis2") && $("kpis2").classList.remove("kpis-8");
   const ctx = kpiCard("Líneas", k.n_lineas, "operando en el ámbito", IC.bus, "neutral");
   $("kpis2").innerHTML = [
     kpiCard("Flota en punta", fmt(k.flota_pico), "buses activos máx/hora", IC.bus, "neutral"),
@@ -957,7 +971,11 @@ function gaugeColor(pct,dir){
   const g = dir>0 ? pct : dir<0 ? 200-pct : pct;
   return g>=95 ? _tok('--live') : g>=75 ? _tok('--warn') : _tok('--alert');
 }
-function liveBox(s, live, norm, pct){
+function liveBox(s, live, norm, pct, opts){
+  // opts.normLbl: rotulo del comparador (el vivo dice "normal"; la banda historica de una
+  // ciudad estatica compara la PUNTA contra el promedio del dia de operacion).
+  // opts.hist: agrega el sello "historico" para que la cifra no se lea como de este minuto.
+  opts = opts || {};
   // F1: reloj semicírculo más compacto; valor dentro del arco, aguja, % al final de la aguja.
   // Baseline "normal a esta hora" abajo en mono/--muted + delta semántico (▲/▼/=).
   const col = gaugeColor(pct, s.dir);
@@ -985,14 +1003,17 @@ function liveBox(s, live, norm, pct){
   // baseline "normal a esta hora" (no decorativo). Color del arco = estado (gaugeColor); pista = --line-soft.
   const prog = pct==null ? "" :
     `<path d="M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${tx} ${ty}" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round"/>`;
-  return `<div class="kpi klive" data-k="${s.k}" style="border-color:${col}30"><div class="lab"><span class="ic">${s.ic}</span>${s.lab}</div>`+
+  return `<div class="kpi klive${opts.hist?" k-hist":""}" data-k="${s.k}" style="border-color:${col}30">`+
+    `<div class="lab"><span class="ic">${s.ic}</span>${s.lab}`+
+    (opts.hist?`<span class="hist-tag" title="${opts.tip||"Del registro GPS historico"}">histórico</span>`:"")+
+    `</div>`+
     `<svg class="gauge" viewBox="-8 -12 216 118">`+
       `<path class="g-track" d="M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}" fill="none" stroke="var(--line-soft)" stroke-width="8" stroke-linecap="round"/>`+
       prog+
       // NÚMERO PROTAGONISTA: centrado en el arco, limpio, color --text-hi (vía CSS), sin nada encima
       `<text x="${cx}" y="58" text-anchor="middle" dominant-baseline="middle" class="g-val">${valTxt}<tspan class="g-unit" dx="2">${s.unit}</tspan></text>`+
     `</svg>`+
-    `<div class="sub">${norm!=null ? `normal: <b class="g-norm">${normTxt}</b>${deltaTxt}` : `<span style="color:var(--muted)">${valTxt}${s.unit}</span>`}</div></div>`;
+    `<div class="sub">${norm!=null ? `${opts.normLbl||"normal"}: <b class="g-norm">${normTxt}</b>${deltaTxt}` : `<span style="color:var(--muted)">${valTxt}${s.unit}</span>`}</div></div>`;
 }
 // F2: animación count-up; respeta prefers-reduced-motion
 const REDUCED_MOTION = matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
