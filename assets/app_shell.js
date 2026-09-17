@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=233`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=234`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -815,6 +815,17 @@ function renderDemMap(){
   setTimeout(()=>{try{dmap.invalidateSize();}catch(e){}},60);
 }
 /* nota de procedencia bajo la banda de KPIs; _kpiNote(null) la oculta */
+/* Tarjeta de KPI HISTÓRICO (no vivo). La usan la vista por comuna —donde el capturador no
+   desglosa— y la banda de una ciudad ESTÁTICA, que no tiene "ahora" contra el cual comparar.
+   Lleva el sello "histórico" para que nadie lea la cifra como si fuera de este minuto. */
+function histCard(lab,val,sub,icon,stt,tip){
+  const st = stt || "neutral";
+  return `<div class="kpi k-hist ${SEM_CARD[st]}" data-k="hist">`+
+    `<div class="lab">${icon?`<span class="ic">${icon}</span>`:""}<span>${lab}</span>`+
+    `<span class="hist-tag" title="${tip||"Cifra del registro histórico, no del vivo"}">histórico</span></div>`+
+    `<div class="val ${SEM_CLS[st]}">${val}</div><div class="sub">${sub}</div></div>`;
+}
+
 function _kpiNote(html){
   const n = $("kpis2-note"); if(!n) return;
   if(!html){ n.hidden = true; n.innerHTML = ""; return; }
@@ -830,6 +841,40 @@ function renderKPIs(cell){
   if((home || lineView) && DIA && BASE30){ renderLiveKPIs(); return; }
   const k = cell.kpi;
   if(!k){ $("kpis2").innerHTML = `<div class="empty">Sin datos para este ámbito.</div>`; _kpiNote(null); return; }
+  // CIUDAD ESTÁTICA (o vivo aún sin cargar): antes se mostraban 4 KPIs planos donde GCCP muestra
+  // 8 gauges, y la diferencia salta a la vista. No hay "ahora" que comparar contra "lo normal",
+  // pero `baseline_30min` YA calcula la partición histórica de la flota (en ruta / en terminal /
+  // fuera de servicio / sin operar) por bin de 30 min, más velocidad, detención y frecuencia.
+  // Se muestra el DÍA LABORAL TÍPICO EN SU PUNTA, con el sello "histórico" en cada tarjeta.
+  if(BASE30 && BASE30.L && Array.isArray(BASE30.L.buses_op)){
+    const L = BASE30.L, bins = BASE30.bins || [];
+    // bin de punta = el de mayor flota en ruta (no una hora fija: cada ciudad puntea distinto)
+    let ip = -1, mx = -1;
+    L.buses_op.forEach((v,i)=>{ if(v!=null && v>mx){ mx=v; ip=i; } });
+    if(ip >= 0){
+      const at = a => (Array.isArray(a) && a[ip]!=null) ? a[ip] : null;
+      const nn = v => v==null ? "—" : fmt(Math.round(v));
+      const hh = bins[ip] || "";
+      const tip = `Día laboral típico a las ${hh}, del registro GPS histórico`;
+      $("kpis2").classList.add("kpis-8");
+      $("kpis2").innerHTML = [
+        histCard("Buses en ruta", nn(mx), `máximo del día laboral · ${hh}`, IC.bus, "neutral", tip),
+        histCard("Buses en terminal", nn(at(L.term)), `en punta · ${hh}`, IC.park||IC.bus, "neutral", tip),
+        histCard("Fuera de servicio", nn(at(L.descanso)), `flota sin operar en ese bin`, IC.pause||IC.stop, "neutral", tip),
+        histCard("Sin operar en el día", nn(at(L.inact)), `del registro de flota`, IC.sleep||IC.bus, "neutral", tip),
+        histCard("Velocidad media", k.vel==null?"—":fmt1(k.vel)+" km/h", "efectiva, en ruta", IC.zap,
+                 k.vel==null?"neutral":semHigh(k.vel,22,14), "Promedio de todo el período con dato"),
+        histCard("Tiempo detenido", k.pct_det==null?"—":fmt1(k.pct_det)+" %", "en ruta · excl. terminales", IC.stop,
+                 k.pct_det==null?"neutral":semLow(k.pct_det,18,28), "Promedio de todo el período con dato"),
+        histCard("Frecuencia salida", at(L.freq)==null?"—":fmt(Math.round(at(L.freq)))+"/h", `despachos en punta · ${hh}`, IC.green||IC.bus, "neutral", tip),
+        histCard("Líneas", fmt(k.n_lineas), "operando en el ámbito", IC.bus, "neutral", "Del histórico del período"),
+      ].join("");
+      _kpiNote(`Cifras del <b>día laboral típico</b> en su punta (<b>${hh}</b>), del registro GPS histórico`
+               + (CITY.live ? "" : " — esta ciudad no tiene feed en vivo") + ".");
+      return;
+    }
+  }
+  $("kpis2") && $("kpis2").classList.remove("kpis-8");
   const ctx = kpiCard("Líneas", k.n_lineas, "operando en el ámbito", IC.bus, "neutral");
   $("kpis2").innerHTML = [
     kpiCard("Flota en punta", fmt(k.flota_pico), "buses activos máx/hora", IC.bus, "neutral"),
@@ -858,18 +903,15 @@ function renderComunaKPIs(){
   const cell = (T && T.cells && T.cells[`${C}|TODAS`]) || null;
   const k = cell && cell.kpi;
   if(!k){                                  // degradación limpia: sin celda no hay banda, y sin excepción
-    cont.dataset.lin = "";
+    $("kpis2") && $("kpis2").classList.remove("kpis-8");
+  cont.dataset.lin = "";
     cont.innerHTML = `<div class="empty">Sin cifras agregadas para ${C} en territorio.json.</div>`;
     _kpiNote(null);
     return;
   }
-  const histCard = (lab,val,sub,icon,stt) => {
-    const st = stt || "neutral";
-    return `<div class="kpi k-hist ${SEM_CARD[st]}" data-k="hist">`+
-      `<div class="lab">${icon?`<span class="ic">${icon}</span>`:""}<span>${lab}</span>`+
-      `<span class="hist-tag" title="Cifra del registro histórico: el capturador en vivo no desglosa por comuna">histórico</span></div>`+
-      `<div class="val ${SEM_CLS[st]}">${val}</div><div class="sub">${sub}</div></div>`;
-  };
+  // histCard vive a nivel de módulo (ver arriba): la usan la banda por comuna Y la
+  // banda histórica de ciudad estática.
+
   const nl = k.n_lineas==null ? "—" : fmt(k.n_lineas);
   cont.dataset.lin = "";                   // invalida el cache de tarjetas vivas de renderLiveKPIs
   cont.innerHTML = [
@@ -1094,6 +1136,9 @@ function _baseVal(s, base, b, L){
   return (base[s.k]||[])[b];
 }
 function renderLiveKPIs(){
+  // si la banda histórica de 8 dejó su clase de grilla puesta (el vivo puede cargar después),
+  // se limpia: con vivo la banda vuelve a 5 columnas.
+  $("kpis2") && $("kpis2").classList.remove("kpis-8");
   // CHOKE POINT: la vista de COMUNA no se sirve del vivo (dia.json no desglosa por comuna). Se redirige
   // acá y no en cada llamador, porque además de render() entran loadDia() y loadLive() cada refresco —
   // si uno se olvidaba, volvía a pintar la banda vacía encima de la histórica sin fallar en nada.
@@ -2698,6 +2743,11 @@ function renderMapa(){
   const comActiva = state.comuna!=="TODAS";
   feats.forEach(f=>{
     const sel = f.properties.name===state.comuna;
+    // `es_bbox`: la comuna contiene TODA el área de estudio, así que el polígono recortado es el
+    // rectángulo del bbox y NO un límite comunal — trazarlo sería dibujar una línea inventada
+    // (caso Antofagasta, cuya comuna se extiende 2.560 km al interior). Se sigue usando para
+    // punto-en-polígono y para encuadrar el mapa, pero no se dibuja.
+    if(f.properties.es_bbox) return;
     if(comActiva && !sel){
       L.geoJSON(f,{style:{color:"rgba(148,161,186,.14)",weight:0.6,fill:false}}).addTo(comunaLayer);   // vecina atenuada
     } else {
