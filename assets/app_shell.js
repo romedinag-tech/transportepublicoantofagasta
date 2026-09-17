@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=241`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=242`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -865,7 +865,10 @@ function setHdrVentana(){
   _hdrVentanaOk=true;
   const a = _mesAnio(T.desde), b = _mesAnio(T.hasta);
   if(!a && !b) return;
-  el.textContent = (a===b || !b) ? a : `${a} a ${b}`;
+  // `meses` cuenta solo los meses con >=7 días de dato (lo calcula refresh_historico). Con uno
+  // solo se muestra ESE mes: decir "jun-2025 a jul-2025" cuando julio son 2.159 pulsos de una
+  // madrugada implicaría dos meses de operación que no existen.
+  el.textContent = (T.meses === 1 || a === b || !b) ? a : `${a} a ${b}`;
   const st = $("hdr-status");
   if(st) st.setAttribute("title",
     `Registros GPS históricos${T.dias?` · ${T.dias} días con dato`:""} — esta ciudad no tiene feed en vivo`);
