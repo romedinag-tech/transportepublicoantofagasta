@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=232`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=233`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -2325,6 +2325,23 @@ const ofColor   = b => (b==null||b<=0) ? "#7f1d1d" : `hsl(${120*Math.min(b/30,1)
 const dinColor  = p => (p==null) ? "#475569" : `hsl(${120*Math.max(0,Math.min(p,1))},70%,50%)`;     // Cobertura DINÁMICA: P_total 0..1 (rojo 0% -> verde 100%) — modelo cápsula 2 min
 const odColor   = r => (r==null) ? "#475569" : cobColor(100*r/odMax());                            // Cobertura oferta/demanda: cociente NORMALIZado al máximo (100% = mejor cubierta)
 let NSE_LO=null, NSE_HI=null;
+// El campo `nse` viaja en DOS escalas según la ciudad y el rótulo tiene que decir cuál:
+//  · GCCP (catastro SII): avalúo fiscal del suelo en CLP/m² — medido 1.607 a 1.229.109.
+//  · ciudades portadas (activo nacional): `nse_score` 0-100 — Antofagasta 5,3 a 99,4.
+// Se rotulaba SIEMPRE "avalúo CLP/m²", así que en las regionales un 69,5 se leía como
+// "69,5 CLP/m²". La unidad la declara el productor en `resumen.nse_unidad`; si no viene, se
+// asume CLP/m² para no cambiar lo que GCCP ya mostraba.
+function nseUnidad(){
+  try{ return (COB && COB.resumen && COB.resumen.nse_unidad) || "clp_m2"; }catch(e){ return "clp_m2"; }
+}
+const nseEsScore = () => nseUnidad() === "score_0_100";
+const nseUnidadLbl = () => nseEsScore() ? "índice 0-100" : "avalúo CLP/m²";
+const nseValorLbl = v => nseEsScore()
+  ? `índice <b>${NF.format(Math.round(v*10)/10)}</b>/100`
+  : `avalúo ${NF.format(v)} CLP/m²`;
+const nseFuenteLbl = () => nseEsScore()
+  ? "índice socioeconómico 0-100 del banco nacional de uso de suelo (por zona censal)"
+  : "terciles de avalúo fiscal del suelo (CLP/m²)";
 function nseColor(v){
   if(v==null) return "#475569";
   if(NSE_LO==null){ const a=COB.features.map(f=>f.properties.nse).filter(x=>x>0).sort((x,y)=>x-y);
@@ -2569,7 +2586,7 @@ function drawCoverage(mode){
       : (mode==="cover" && state.coverSub==="od")
       ? (()=>{ const r=p.cob_od?p.cob_od[per]:null; const pct=r==null?null:Math.round(100*r/odMax()); return `${_mzh} · ${periodoLbl(per)}<br>cobertura oferta/demanda: <b>${pct==null?"sin servicio":pct+"%"}</b> del nivel mejor cubierto`; })()
       : (mode==="cover" && lineMode)
-      ? `${_mzh} · línea ${state.linea}<br>NSE: <b>${nseLabel(nseTercil(p.nse))}</b>${p.nse?` · avalúo ${NF.format(p.nse)} CLP/m²`:""}`
+      ? `${_mzh} · línea ${state.linea}<br>NSE: <b>${nseLabel(nseTercil(p.nse))}</b>${p.nse?` · ${nseValorLbl(p.nse)}`:""}`
       : (mode==="cover")
       ? `${_mzh} · acceso ${p.acc} min<br>cobertura estática: <b>${p.cob_est??"—"}%</b> de la manzana a ≤300 m de la red`
       : (mode==="wait")
@@ -2636,7 +2653,7 @@ function setCoverLegend(mode){
   const NEU = `<span class="grad" style="background:#64748b;opacity:.5"></span>`;
   const txt = (mode==="cover" && state.coverSub==="din") ? [`Cobertura dinámica · ${periodoLbl(state.periodo)}`,GYR,`<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>% del tiempo cubierto por algún bus (modelo cápsula 2 min + 300 m) · cambia con el período</span>`]
     : (mode==="cover" && state.coverSub==="od") ? [`Cobertura oferta/demanda · ${periodoLbl(state.periodo)}`,GYR,`<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>capacidad ÷ viajes generados · 100% = zona residencial mejor cubierta (las mejor conectadas), no el centro · reparto por demanda</span>`]
-    : (mode==="cover" && state.linea!=="TODAS") ? [`NSE ${HOGL()} cubiertos · Línea ${state.linea}`,`<span class="grad" style="background:linear-gradient(90deg,#fb923c 33%,#94a3b8 33% 66%,#2dd4bf 66%)"></span>`,"<span class='lbls'><i>bajo</i><i>medio</i><i>alto</i></span><span class='par'>terciles de avalúo fiscal del suelo (CLP/m²) — solo manzanas cubiertas a ≤300 m</span>"]
+    : (mode==="cover" && state.linea!=="TODAS") ? [`NSE ${HOGL()} cubiertos · Línea ${state.linea}`,`<span class="grad" style="background:linear-gradient(90deg,#fb923c 33%,#94a3b8 33% 66%,#2dd4bf 66%)"></span>`,"<span class='lbls'><i>bajo</i><i>medio</i><i>alto</i></span><span class='par'>${nseFuenteLbl()} — solo manzanas cubiertas a ≤300 m</span>"]
     : mode==="cover" ? ["Cobertura estática (≤300 m de la red)",GYR,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>% de la manzana dentro del área de influencia 300 m de los recorridos</span>"]
     : mode==="trans" ? ["Transbordo: viajes-trabajo con UNA línea (Censo 2024)",GYR,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>verde = llega directo con una línea · rojo = exige transbordo o es inalcanzable</span>"]
     : mode==="wait" ? [`Espera al próximo bus · ${periodoLbl(state.periodo)} (min)`,RYG,"<span class='lbls'><i>0</i><i>3</i><i>6+</i></span><span class='par'>manzana = espera efectiva al próximo bus (con apelotonamiento) · ● paradero = espera ahí (hover)</span>"]
@@ -2649,7 +2666,7 @@ function setCoverLegend(mode){
     : mode==="det" ? ["Congestión: nodos de demora (sin terminales)",`<span class="grad" style="background:linear-gradient(90deg,hsl(45,85%,52%),hsl(0,85%,52%))"></span>`,"<span class='lbls'><i>menor</i><i>mayor</i></span><span class='par'><b style='color:#22d3ee'>▣</b> terminal · flota por línea al pasar</span>"]
     : mode==="terms" ? ["Terminales (validados manualmente)",`<span class="grad" style="background:linear-gradient(90deg,#22c55e,#22c55e)"></span>`,"<span class='lbls'><i style='color:#22c55e'>● terminal</i><i style='color:#22d3ee'>● punto de retorno</i></span><span class='par'>verde numerado = terminal formal · cyan = fin de ruta con espera breve (no es terminal, pero excluido de detención)</span>"]
     : mode==="exc" ? ["Excesos de velocidad (≥70 km/h sostenidos · hoy)",`<span class="grad" style="background:linear-gradient(90deg,#fbbf24,#f87171,#dc2626)"></span>`,"<span class='lbls'><i>70</i><i>85</i><i>100+</i></span><span class='par'>velocidad física sostenida en 1 km (no pico instantáneo)</span>"]
-    : ["NSE (avalúo CLP/m²)",`<span class="grad" style="background:linear-gradient(90deg,hsl(205,68%,52%),hsl(118,68%,52%),hsl(30,68%,52%))"></span>`,"<span class='lbls'><i>bajo</i><i></i><i>alto</i></span>"];
+    : [`NSE (${nseUnidadLbl()})`,`<span class="grad" style="background:linear-gradient(90deg,hsl(205,68%,52%),hsl(118,68%,52%),hsl(30,68%,52%))"></span>`,"<span class='lbls'><i>bajo</i><i></i><i>alto</i></span>"];
   coverLegend = L.control({position:"bottomleft"});
   coverLegend.onAdd = ()=>{ const d=L.DomUtil.create("div","speedleg"); d.innerHTML=`<b>${txt[0]}</b>${txt[1]}${txt[2]}`; return d; };
   coverLegend.addTo(lmap);
@@ -2746,7 +2763,7 @@ function renderMapa(){
       : state.coverSub==="od" ? `Cobertura oferta/demanda · ${periodoLbl(state.periodo)}` : "Cobertura estática";
     const titulo = {cover:coverTit,trans:"Transbordo",wait:`Espera al próximo bus · ${periodoLbl(state.periodo)}`,
       conges:`Velocidad efectiva por arco · ${periodoLbl(state.periodo)}`, bunch:`Apelotonamiento (bunching) · ${periodoLbl(state.periodo)}`, det:"Congestión y terminales",
-      salud:"Accesibilidad a salud en transporte",edu:"Accesibilidad a educación en transporte",nse:"Nivel socioeconómico (avalúo)"}[M];
+      salud:"Accesibilidad a salud en transporte",edu:"Accesibilidad a educación en transporte",nse:`Nivel socioeconómico (${nseUnidadLbl()})`}[M];
     if(state.linea!=="TODAS"){
       $("map-title").textContent = `Línea ${state.linea} · ${titulo||"análisis territorial"}`;
       if(b) b.textContent = (M==="conges"||M==="bunch"||M==="det")
