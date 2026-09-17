@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=234`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=235`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -3769,7 +3769,12 @@ function renderEvolucion(){
     J("kpis_spec.json").then(s=>{
       if(s && Array.isArray(s.kpis)) LIVE_KPIS = s.kpis.map(o=>({...o, f:(_LIVE_FMT[o.fmt]||_LIVE_FMT.int)}));
     }).catch(()=>{});
-    J("baseline_30min.json").then(d=>{ BASE30=d; loadDia(); }).catch(()=>{});   // baseline + vivo del inicio
+    J("baseline_30min.json").then(d=>{ BASE30=d;
+      // la banda histórica de 8 tarjetas se arma CON el baseline, y este llega async: sin este
+      // re-dibujo la banda se quedaba en las 4 planas aunque el dato ya estuviera cargado
+      // (mismo patrón que el selector de modos de mapa con la cobertura).
+      try{ renderKPIs(cellOf()); }catch(e){}
+      loadDia(); }).catch(()=>{});   // baseline + vivo del inicio
     J("baseline_var.json").then(d=>{ BVAR=d; if(state.vista==="normal"&&state.linea!=="TODAS") renderVarObserved(); }).catch(()=>{});   // baseline por variante (Bloque 3)
     J("infraestructura.json").then(d=>{ INFRAE=d; if(state.modo==="infra") renderInfra(); else if(state.modo==="demanda") renderDemMap(); }).catch(()=>{});   // observatorio de infraestructura (+ geometría de ejes para el mapa de demanda)
     if(CITY.demanda){   // 3er lente: validaciones del medio de pago (abordajes)
