@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=237`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=238`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -1021,9 +1021,12 @@ function liveBox(s, live, norm, pct, opts){
   // baseline "normal a esta hora" (no decorativo). Color del arco = estado (gaugeColor); pista = --line-soft.
   const prog = pct==null ? "" :
     `<path d="M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${tx} ${ty}" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round"/>`;
-  return `<div class="kpi klive${opts.hist?" k-hist":""}" data-k="${s.k}" style="border-color:${col}30">`+
+  return `<div class="kpi klive${opts.hist?" k-hist":""}" data-k="${s.k}" style="border-color:${col}30"`+
+    (opts.hist?` title="${opts.tip||"Del registro GPS histórico"}"`:"")+`>`+
     `<div class="lab"><span class="ic">${s.ic}</span>${s.lab}`+
-    (opts.hist?`<span class="hist-tag" title="${opts.tip||"Del registro GPS historico"}">histórico</span>`:"")+
+    // sin sello en la tarjeta: GCCP no lo lleva y la nota bajo la banda ya declara el período.
+    // El `title` conserva la advertencia al pasar el mouse, sin ensuciar el diseño.
+    ""+
     `</div>`+
     `<svg class="gauge" viewBox="-8 -12 216 118">`+
       `<path class="g-track" d="M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}" fill="none" stroke="var(--line-soft)" stroke-width="8" stroke-linecap="round"/>`+
@@ -3807,6 +3810,9 @@ function renderEvolucion(){
     // spec declarativo de KPIs (opcional, fallback al hardcode si no carga)
     J("kpis_spec.json").then(s=>{
       if(s && Array.isArray(s.kpis)) LIVE_KPIS = s.kpis.map(o=>({...o, f:(_LIVE_FMT[o.fmt]||_LIVE_FMT.int)}));
+      // el spec trae los iconos EMOJI que usa GCCP y pisa los SVG inline: hay que volver a
+      // dibujar la banda, o la histórica (que se pinta una sola vez) queda con los iconos grises.
+      try{ renderKPIs(cellOf()); }catch(e){}
     }).catch(()=>{});
     J("baseline_30min.json").then(d=>{ BASE30=d;
       // la banda histórica de 8 tarjetas se arma CON el baseline, y este llega async: sin este
