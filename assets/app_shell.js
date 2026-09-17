@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=230`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=231`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -69,13 +69,32 @@ let csChart, freqChart, linFreqChart, lineFreqHistChart, rankProgChart, lmap, ba
 const LIVE_URL = _liveUrl("live.json");
 // Modos del mapa gateados por lo que la ciudad TIENE datos: 'live'/'exc' solo con feed; trans/salud/edu/nse
 // requieren EOD + catastro SII (CITY.rich, hoy solo GCCP). Así una ciudad estática no muestra modos vacíos.
-const MAP_MODES = [
-  ...(CITY.live ? [["live","En vivo"]] : []),
-  ["conges","Congestión"], ["cover","Cobertura"], ["wait","Espera"], ["bunch","Bunching"],
-  ["det","Detenciones"], ["terms","Terminales"],
-  ...(CITY.live ? [["exc","Excesos vel."]] : []),
-  ...(CITY.rich ? [["trans","Transbordo"], ["salud","Salud"], ["edu","Educación"], ["nse","NSE"]] : []),
-];
+// Los modos temáticos se gateaban EN BLOQUE por `CITY.rich`, así que una ciudad no-rich perdía
+// los 4 aunque tuviera el dato. Medido: Antofagasta, Temuco y Punta Arenas tienen `nse` en el
+// 100% de sus manzanas (3.260/3.260, 3.878/3.878, 1.865/1.865) y aun así el modo NSE estaba
+// oculto; `salud` y `edu`, en cambio, vienen NULOS en las tres (falta materializar los
+// establecimientos). Un flag único no puede decidir por cuatro capas distintas.
+// Ahora cada modo se gatea POR SU PROPIO DATO, medido sobre las manzanas ya cargadas.
+// `trans` sigue amarrado a rich: el transbordo necesita demanda, que no se deriva de la cobertura.
+function cobTiene(campo){
+  try{
+    const fs = (COB && (COB.features || COB)) || [];
+    for(const f of fs){ const p = f.properties || f; if(p && p[campo] != null) return true; }
+  }catch(e){}
+  return false;
+}
+function mapModes(){
+  return [
+    ...(CITY.live ? [["live","En vivo"]] : []),
+    ["conges","Congestión"], ["cover","Cobertura"], ["wait","Espera"], ["bunch","Bunching"],
+    ["det","Detenciones"], ["terms","Terminales"],
+    ...(CITY.live ? [["exc","Excesos vel."]] : []),        // capa viva: se alimenta de live.json
+    ...(CITY.rich ? [["trans","Transbordo"]] : []),        // requiere demanda/transbordo
+    ...(cobTiene("salud") ? [["salud","Salud"]] : []),
+    ...(cobTiene("edu")   ? [["edu","Educación"]] : []),
+    ...(cobTiene("nse")   ? [["nse","NSE"]] : []),
+  ];
+}
 const PEAK_H = [7,8,9,17,18,19];
 const PERIODOS = [["agg","Agregado"],["am","Punta AM"],["md","Mediodía"],["pm","Punta PM"],["off","Fuera punta"],["noche","Noche"]];
 const PERIODO_H = {agg:[6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22], am:[7,8,9], md:[12,13,14], pm:[17,18,19], off:[10,11,15,16,20,21,22], noche:[21,22,23]};
@@ -2637,7 +2656,9 @@ function setCoverLegend(mode){
 }
 function buildMapModes(){
   const box=$("map-mode"); if(!box) return;
-  box.innerHTML = MAP_MODES.map(([k,l])=>`<b data-m="${k}" class="${state.mapMode===k?"on":""}">${l}</b>`).join("");
+  // mapModes() se evalúa en cada render, no una vez al cargar: la cobertura llega async y recién
+  // entonces se sabe qué capas temáticas tienen dato.
+  box.innerHTML = mapModes().map(([k,l])=>`<b data-m="${k}" class="${state.mapMode===k?"on":""}">${l}</b>`).join("");
   box.querySelectorAll("b").forEach(el=>el.onclick=()=>{ state.mapMode=el.dataset.m;
     box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.m===state.mapMode)); render(); });
 }
