@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=231`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=232`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -3651,7 +3651,11 @@ function renderEvolucion(){
     }).catch(()=>{ const vb=$("vfoot-build"); if(vb) vb.textContent="Visor actualizado: "+BUILD; });
     applyTheme(document.documentElement.dataset.theme || "dark");   // respeta el tema ya fijado (dark/light o cliente-*), no lo normaliza
     J("comuna_lineas.json").then(d=>{ CLIN=d; buildLineaList($("linea-search")?$("linea-search").value:""); }).catch(()=>{});
-    J("cobertura.json").then(d=>{ COB=d; renderNseGap(); if(state.mapMode!=="live") renderMapa();
+    // buildMapModes() se llama OTRA VEZ acá porque los modos temáticos (NSE, Salud, Educación)
+    // se gatean por el dato de las manzanas, y la cobertura llega async: el selector se dibuja al
+    // arrancar, cuando COB todavía es null, y sin este re-dibujo el modo NSE nunca aparecía aunque
+    // `cobTiene('nse')` diera true (medido en Antofagasta: 3.260/3.260 manzanas con NSE).
+    J("cobertura.json").then(d=>{ COB=d; buildMapModes(); renderNseGap(); if(state.mapMode!=="live") renderMapa();
       if(LIVE && state.vista==="normal" && state.linea==="TODAS" && state.comuna==="TODAS") renderLiveExtras();
     }).catch(()=>{});
     J("ranking_lineas.json").then(d=>{ RANK=d; if(state.vista==="normal"&&state.linea==="TODAS") renderRanking(); }).catch(()=>{});
