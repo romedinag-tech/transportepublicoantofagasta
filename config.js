@@ -1,14 +1,16 @@
-/* Config de ciudad para el shell compartido (_motor/dashboard_kit). El shell es IDÉNTICO entre ciudades;
-   solo cambia este archivo + data/. Una mejora transversal se hace en el kit y se despliega con deploy_dashboard.py. */
+/* Config de ciudad — shell compartido (_motor/dashboard_kit).
+   GENERADO por `gen_config_js.py` desde config_ciudad.py: NO editar a mano, se pisa.
+   Los nombres de comuna vienen del geojson validado, no de una lista escrita aparte. */
 window.CITY = {
   slug: "antofagasta",
   nombre: "Antofagasta",
-  sigla: "AF",
-  lat0: -23.65, lon0: -70.40,
-  comunas: ["Antofagasta"],            // 1 comuna → sin pestañas por comuna, sin ranking/comparador
+  sigla: "A",
+  lat0: -23.6146, lon0: -70.3938,
+  comunas: ["Antofagasta"],
   comunasGeojson: "comuna_antofagasta.geojson",
-  live: false,                          // estático: sin feed GTFS-RT
+  live: false,
   liveBase: "",
+  demanda: true,
   repo: "transportepublicoAntofagasta",
-  voz: { ejeSing: "eje", ejePlur: "ejes", EjePlur: "Ejes" },   // Antofagasta no tiene corredores segregados
+  voz: {"ejeSing": "eje", "ejePlur": "ejes", "EjePlur": "Ejes"},
 };
