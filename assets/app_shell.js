@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=243`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=244`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -631,6 +631,26 @@ function renderDemCtrls(){
     pm.querySelectorAll("b").forEach(b=>b.onclick=()=>{ demMet=b.dataset.dm2; renderDemCtrls(); renderDemMap(); }); }
 }
 function renderDemanda(){
+  /* PERÍODO DE LA DEMANDA — y el aviso cuando NO es el mismo que el de la oferta.
+     En Antofagasta la demanda es de jul-2026 y el GPS de jun-2025: indicadores como
+     "pasajeros por bus" cruzan un numerador de un año con un denominador de otro. La cifra sirve
+     igual (la flota se mantuvo: 88,3% de las patentes calzan), pero quien la lee tiene que saberlo. */
+  try{
+    const n = $("dem-note");
+    if(n && DEM && DEM.periodo){
+      const dd = (DEM.periodo.desde||"").slice(0,7), hh = (DEM.periodo.hasta||"").slice(0,7);
+      const per = (dd===hh||!hh) ? dd : `${dd} a ${hh}`;
+      const of0 = (typeof T!=="undefined" && T && T.desde) ? T.desde.slice(0,7) : null;
+      const of1 = (typeof T!=="undefined" && T && T.hasta) ? T.hasta.slice(0,7) : null;
+      const cruza = of0 && (hh < of0 || dd > (of1||of0));   // sin solape entre demanda y oferta
+      n.innerHTML = `<span class="dot"></span><span>Validaciones del medio de pago de <b>${per}</b>`
+        + (cruza ? ` — la <b>oferta</b> (flota, velocidad, frecuencia) es de <b>${of0===of1?of0:of0+" a "+of1}</b>:
+             los indicadores que cruzan ambas, como <b>pasajeros por bus</b>, comparan períodos distintos.` : "")
+        + `</span>`;
+      n.hidden = false;
+    }
+  }catch(e){}
+
   if(!DEM){ $("dem-kpis").innerHTML='<div class="empty">Cargando demanda…</div>'; return; }
   // Banda de 9 KPIs: del SISTEMA, o de la LÍNEA elegida (empresa/recorrido) si hay una seleccionada.
   const lb = (state.linea && state.linea!=="TODAS") ? (DEM.lineas||[]).find(l=>l.linea===state.linea) : null;
