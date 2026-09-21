@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=248`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=249`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -3013,8 +3013,12 @@ function renderLineaKpis(){
     return;
   }
   // COMUNA: DETENCIONES (aggregate lines in that comuna)
-  const comView = state.linea==="TODAS" && state.comuna!=="TODAS" && state.vista==="normal";
-  const comLines = comView && CLIN ? (CLIN[state.comuna]||[]) : [];
+  // Ciudad de UNA comuna (Osorno, Castro, Valdivia, Calama…): su única pestaña es la del sistema
+  // (state.comuna==='TODAS'), así que estos paneles por comuna nunca se mostraban. Ahí el sistema ES la
+  // comuna. Con varias comunas no cambia nada: comSel queda nulo en la vista de sistema. (2026-09-21)
+  const comSel = state.comuna!=="TODAS" ? state.comuna : ((COM_ORDER||[]).length===1 ? COM_ORDER[0] : null);
+  const comView = state.linea==="TODAS" && !!comSel && state.vista==="normal";
+  const comLines = comView && CLIN ? (CLIN[comSel]||[]) : [];
   if(comView && mode==="det" && DETP&&DETP.lineas && comLines.length){
     const sen=state.sentido==="amb"?"amb":state.sentido, per=state.periodo;
     const vals = comLines.map(lb=>{const d=DETP.lineas[lb]; if(!d)return null; const s=d[sen]||d.amb||{}; return (s.L||{})[per];}).filter(v=>v!=null);
@@ -3031,12 +3035,12 @@ function renderLineaKpis(){
     const card=(cls,l,v,s,st="")=>`<div class="lk ${cls}" style="${st}"><div class="lab">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`;
     el.style.display="grid";
     el.innerHTML = [
-      card("b-tot",`${IC.stop} % detenido comuna (${periodoLbl(per)})`, det!=null?det+"%":"—", `promedio ${comLines.length} líneas · ${state.comuna}`, bg(det)),
+      card("b-tot",`${IC.stop} % detenido comuna (${periodoLbl(per)})`, det!=null?det+"%":"—", `promedio ${comLines.length} líneas · ${comSel}`, bg(det)),
       card("b-eff","Vs. sistema", (det!=null&&sis!=null)?((det-sis)>=0?"+":"")+(det-sis).toFixed(1):"—", sis!=null?`sistema ${sis}%`:"—"),
       card("b-bajo","% AM punta", dAm!=null?dAm+"%":"—", lbl(dAm), bg(dAm)),
       card("b-med","% PM punta", dPm!=null?dPm+"%":"—", lbl(dPm), bg(dPm)),
       card("b-alto","% Noche", dNoche!=null?dNoche+"%":"—", lbl(dNoche), bg(dNoche)),
-      card("b-cic","Líneas", comLines.length+"", `que operan en ${state.comuna}`),
+      card("b-cic","Líneas", comLines.length+"", `que operan en ${comSel}`),
     ].join("");
     return;
   }
@@ -3054,7 +3058,7 @@ function renderLineaKpis(){
     el.style.display="grid";
     el.innerHTML = [
       card("b-tot",`${IC.chart} CV comuna (${periodoLbl(per)})`, cv??"—", `${cvLbl(+cv)} · promedio ${vals.length} líneas`, cvBg(+cv)),
-      card("b-eff",`${IC.timer} Headway medio`, hw!=null?hw+" min":"—", `promedio en ${state.comuna}`),
+      card("b-eff",`${IC.timer} Headway medio`, hw!=null?hw+" min":"—", `promedio en ${comSel}`),
       card("b-bajo","Vs. sistema", sisCv!=null?(cv!=null?((cv-sisCv)>=0?"+":"")+(cv-sisCv).toFixed(2):"—"):"—",
         sisCv!=null?`sistema ${sisCv.toFixed(2)}`:"—", ""),
       card("b-med","Líneas evaluadas", vals.length+"", `de ${comLines.length} que operan`),
@@ -3094,7 +3098,7 @@ function renderLineaKpis(){
   const t2 = _nseTerciles ? _nseTerciles[1] : null;
   const card=(cls,l,v,s)=>`<div class="lk ${cls}"><div class="lab">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`;
   el.style.display="grid";
-  const scope = showCoverLine ? `buffer 300 m · línea ${state.linea}` : `manzanas en ${state.comuna}`;
+  const scope = showCoverLine ? `buffer 300 m · línea ${state.linea}` : `manzanas en ${comSel}`;
   // Sin avalúo SII el tercil es -1 en TODAS las manzanas y hbaj/hmed/halt quedan en 0: eso es "sin dato",
   // no un cero medido (Antofagasta: 3.260/3.260 manzanas con nse = null).
   const _nseOk = cobHasNSE();
