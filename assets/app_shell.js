@@ -33,7 +33,7 @@ CITY.comunas=CITY.comunas||[]; CITY.comunasGeojson=CITY.comunasGeojson||"comunas
 CITY.live=!!CITY.live; CITY.liveBase=CITY.liveBase||""; CITY.voz=CITY.voz||{ejeSing:"eje",ejePlur:"ejes",EjePlur:"Ejes"};
 const _cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const _liveUrl=n=> (CITY.live&&CITY.liveBase?CITY.liveBase:"data/")+n;
-const J = n => fetch(`data/${n}?v=250`).then(r=>{if(!r.ok)throw 0;return r.json();});
+const J = n => fetch(`data/${n}?v=251`).then(r=>{if(!r.ok)throw 0;return r.json();});
 // reloj en vivo (fecha + hora Chile) en el header — útil para las capturas
 function tickReloj(){
   const el = document.getElementById("hdr-reloj-txt"); if(!el) return;
@@ -46,6 +46,7 @@ function tickReloj(){
 try{ tickReloj(); setInterval(tickReloj, 30000); }catch(e){}
 const BUILD = "2026-07-06 02:30";
 
+let TREN=null;   // tren.json: estaciones y oferta publicada por EFE (Biotren / Merval), 2-oct-2026
 let T, GEOM, GEO, CUMP, PAR={}, CSEM={lineas:{}}, LIVE=null, COB=null, EQ={lineas:{}}, GRID=null, OP={lineas:{}}, EMPL={}, CLIN={}, CONGRED=null, RFREQ=null, SGSTATS=null, TERMCONF=null, AYERFREQ=null;
 let DIA=null, BASE30=null;   // vivo (dia.json) y baseline histórico 30min — recuadros del inicio
 let BVAR=null;               // baseline por VARIANTE (baseline_var.json) — Bloque 3 comparación por recorrido
@@ -247,7 +248,11 @@ function cobEstPct(){
 const empresaDe = ln => { const x=(T.lineas||[]).find(l=>l.linea===ln); return (x&&x.empresa)?x.empresa:(x&&x.nombre)?x.nombre:""; };
 
 /* ---------- menús ---------- */
-const COVER_SUBS = [["est","Estática"],["din","Dinámica"],["od","Oferta/demanda"]];   // 'din' reemplaza 'of' (2026-06-28): modelo cápsula 2 min + 300 m, frac=min(1,f/30)
+const COVER_SUBS = [["est","Estática"],["din","Dinámica"],["od","Oferta/demanda"]];
+// Cobertura con TREN (Rodrigo, 2-oct-2026): manzana a ≤300 m de un recorrido de bus o ≤800 m de una estación.
+// Sólo aparece si cobertura.json trae resumen.cob_tp (kpi_cobertura_tren.py); «Estática» queda como bus solo.
+const _hayTren = () => !!(COB && COB.resumen && COB.resumen.cob_tp);
+const coverSubs = () => _hayTren() ? [["tp","Bus + tren"],["est","Estática (bus)"],["din","Dinámica"],["od","Oferta/demanda"]] : COVER_SUBS;   // 'din' reemplaza 'of' (2026-06-28): modelo cápsula 2 min + 300 m, frac=min(1,f/30)
 let DINL = null;   // cobertura_din_lineas.json — KPIs por línea (cargado en init)
 // _dinValueFor: en vista SISTEMA devuelve P_total de la manzana; en vista LÍNEA el frac_línea uniforme (color uniforme dentro de las manzanas cubiertas)
 function _dinValueFor(p){
@@ -387,7 +392,7 @@ function buildPeriodo(){
 function buildCoverSub(){
   const box=$("cover-sub"); if(!box) return;
   box.innerHTML = `<span class="lbl">Cobertura</span><div class="seg">`+
-    COVER_SUBS.map(([k,l])=>`<b data-s="${k}" class="${state.coverSub===k?"on":""}">${l}</b>`).join("")+`</div>`;
+    coverSubs().map(([k,l])=>`<b data-s="${k}" class="${state.coverSub===k?"on":""}">${l}</b>`).join("")+`</div>`;
   box.querySelectorAll("b").forEach(el=>el.onclick=()=>{ state.coverSub=el.dataset.s;
     box.querySelectorAll("b").forEach(b=>b.classList.toggle("on",b.dataset.s===state.coverSub));
     if(state.mapMode==="cover") render(); });
@@ -1367,9 +1372,9 @@ function renderLiveExtras(){
   const ex = computeLiveExtras(L); if(!ex) return;
   const cont = $("kpis2"); if(!cont) return;
   // 10º KPI: Eventos de excesos de velocidad (línea / comuna / sistema). Se agrega SIEMPRE al final.
-  const _exc=(DIA&&DIA.excesos_lin)||{};
+  const _exc=(DIA&&DIA.excesos_lin)||{}, _excVR=(DIA&&DIA.excesos_lin_vr)||{};
   let _en, _esub="≥70 km/h sostenidos · hoy";
-  if(L){ _en=_exc[L]||0; _esub=`≥70 km/h sostenidos · línea ${L}`; }
+  if(L){ _en=_exc[L]||0; _esub=`≥70 km/h sostenidos · línea ${L}`+((_excVR[L]||0)?` · ${_excVR[L]} en vía rápida`:""); }
   else if(C){ const _s=new Set(CLIN[C]||[]); _en=Object.entries(_exc).filter(([l])=>_s.has(l)).reduce((a,[,v])=>a+v,0); _esub=`≥70 km/h sostenidos · ${C}`; }
   else { _en=Object.values(_exc).reduce((a,v)=>a+v,0); _esub="≥70 km/h sostenidos · sistema"; }
   const _pushExc=()=>{ const e=cont.querySelector('.klive[data-k="excesos"]'); const h=liveBoxExcesos(_en,_esub); if(e) e.outerHTML=h; else cont.insertAdjacentHTML("beforeend",h); };
@@ -2151,15 +2156,22 @@ function renderExcesos(){
   const sorted = Object.entries(exc).filter(e=>e[1]>0 && (!comLines || comLines.has(e[0]))).sort((a,b)=>b[1]-a[1]);
   if(!sorted.length){ el.innerHTML='<div style="text-align:center;padding:18px 0;color:var(--mut)">Sin episodios registrados hoy</div>'; return; }
   const total = sorted.reduce((s,e)=>s+e[1],0);
-  $("excesos-sub").textContent = C ? `≥70 km/h sostenidos · ${total} episodios · ${C}` : `≥70 km/h sostenidos · ${total} episodios hoy (velocidad física, no instantánea)`;
+  // rótulo «vía rápida»: episodios en vías con límite señalizado > 80 km/h (autopistas), donde esa velocidad puede
+  // estar permitida. El exceso se cuenta igual; el rótulo sólo dice dónde ocurrió.
+  const excVR = (DIA && DIA.excesos_lin_vr) ? DIA.excesos_lin_vr : {};
+  const totVR = sorted.reduce((s,e)=>s+(excVR[e[0]]||0),0);
+  const _vrTxt = totVR ? ` · ${totVR} en vía rápida` : "";
+  $("excesos-sub").textContent = C ? `≥70 km/h sostenidos · ${total} episodios${_vrTxt} · ${C}` : `≥70 km/h sostenidos · ${total} episodios hoy${_vrTxt} (velocidad física, no instantánea)`;
   const max = sorted[0][1];
   el.innerHTML = sorted.map(([ln,n])=>{
     const emp = empresaDe(ln);
     const nm = emp ? `<span class="lncode">${ln}</span> ${emp}` : `<span class="lncode">${ln}</span>`;
     const w = Math.round(n/max*100);
     const col = n>=5 ? _tok('--alert') : _tok('--warn');
+    const vr = excVR[ln]||0;
+    const vrTag = vr ? `<span title="Episodios en vías con límite señalizado sobre 80 km/h (autopista), donde esa velocidad puede estar permitida" style="margin-left:6px;font-size:10px;color:var(--muted)">${vr===n?"todos":vr} en vía rápida</span>` : "";
     return `<div class="kcr kcr--lin">`+
-      `<div class="kcr-nm">${nm}<span class="kcr-vp" style="color:${col}">${n}</span></div>`+
+      `<div class="kcr-nm">${nm}${vrTag}<span class="kcr-vp" style="color:${col}">${n}</span></div>`+
       `<div class="kcr-row"><div class="kcr-bar"><div class="kcr-fill" style="width:${w}%;background:${col}"></div></div></div></div>`;
   }).join("");
 }
@@ -2234,7 +2246,7 @@ function drawExcesosMap(){
   for(const e of filtered){
     const kmh=e[3], col=kmh>=100?cssv("--critical"):kmh>=85?cssv("--critical"):cssv("--warning");
     L.circleMarker([e[0],e[1]],{radius:5,color:col,fillColor:col,fillOpacity:0.8,weight:1})
-      .bindTooltip(`<b>⚠ ${kmh} km/h</b><br>Línea ${e[2]}`,{direction:"top"})
+      .bindTooltip(`<b>⚠ ${kmh} km/h</b><br>Línea ${e[2]}`+(e[4]===1?`<br><span style="opacity:.8">en vía rápida (límite señalizado sobre 80 km/h)</span>`:""),{direction:"top"})
       .addTo(coverLayer);
   }
   setCoverLegend("exc");
@@ -2686,7 +2698,7 @@ function drawCoverage(mode){
       ? dinColor(_dinValueFor(p))                                         // P_total (sistema) o frac_linea (vista línea)
       : state.coverSub==="od"
       ? odColor(p.cob_od ? p.cob_od[state.periodo] : null)
-      : lineMode ? (nseColors[nseTercil(p.nse)]||cssv("--infra-none")) : cobColor(p.cob_est);
+      : lineMode ? (nseColors[nseTercil(p.nse)]||cssv("--infra-none")) : cobColor(state.coverSub==="tp" ? p.cob_tp : p.cob_est);
     else if(mode==="trans") col = labColor(p.lab ? p.lab.dir : null);    // TRANSBORDO: % de viajes-trabajo con UNA sola línea (Censo); verde=directo, rojo=exige transbordo/inalcanzable
     else if(mode==="wait") col = waitColor(p.waite ? p.waite[state.periodo] : (p.wait ? p.wait[state.periodo] : null));  // espera efectiva al próximo bus (sin destino), fallback a media simple
     else if(mode==="salud") col = accSColor(p.salud);
@@ -2721,7 +2733,9 @@ function drawCoverage(mode){
       : (mode==="cover" && lineMode)
       ? `${_mzh} · línea ${state.linea}<br>NSE: <b>${nseLabel(nseTercil(p.nse))}</b>${p.nse?` · ${nseValorLbl(p.nse)}`:""}`
       : (mode==="cover")
-      ? `${_mzh} · acceso ${p.acc} min<br>cobertura estática: <b>${p.cob_est??"—"}%</b> de la manzana a ≤300 m de la red`
+      ? (state.coverSub==="tp"
+        ? `${_mzh} · acceso ${p.acc} min<br>bus + tren: <b>${p.cob_tp??"—"}%</b> de la manzana cubierta<br>bus a ≤300 m: ${p.cob_est??"—"}% · tren a ≤800 m: ${p.cob_tren??"—"}%${p.est_tren?`<br>estación más cercana: ${p.est_tren} a ${(p.d_tren/1000).toFixed(1).replace(".",",")} km`:""}`
+        : `${_mzh} · acceso ${p.acc} min<br>cobertura estática: <b>${p.cob_est??"—"}%</b> de la manzana a ≤300 m de la red`)
       : (mode==="wait")
       // `n` es POBLACIÓN (n_per del Censo), no viviendas: el rótulo decía "viviendas" y medía personas.
       ? `${NF.format(p.n??0)} habitantes · ${periodoLbl(per)}<br>espera al próximo bus: <b>${we==null?"sin servicio":we+" min"}</b> (efectiva, con apelotonamiento) · media teórica ${wf==null?"—":wf+" min"}`
@@ -2776,7 +2790,26 @@ function drawCoverage(mode){
         .bindTooltip(isS?"Salud":"Educación",{direction:"top"}).addTo(coverLayer);
     });
   }
+  if(mode==="cover" && state.coverSub==="tp" && !lineMode && TREN) drawEstacionesTren();
   setCoverLegend(mode);
+}
+// Estaciones de tren (tren.json): punto + anillo de 800 m; tooltip con la oferta PUBLICADA por EFE (sin inventar
+// frecuencias: la del Biotren es NULL y se dice).
+function drawEstacionesTren(){
+  const _hm = h => Array.isArray(h) ? `${h[0]}–${h[1]}` : "—";
+  const _of = sis => {
+    const S=(TREN.sistemas||[]).find(x=>x.sistema===sis); if(!S) return "";
+    const f=S.frecuencia;
+    const fr = f ? `Frecuencia: laboral ${f.L&&f.L.base_min?f.L.base_min+" min":"—"}${f.L&&f.L.refuerzos&&f.L.refuerzos.length?" (con refuerzos de 6 min en punta)":""} · sábado ${f.S&&f.S.base_min?f.S.base_min+" min":"—"} · domingo ${f.D&&f.D.base_min?f.D.base_min+" min":"—"}`
+                 : "Frecuencia: no publicada por EFE";
+    return `${S.operador||""}<br>${fr}`;
+  };
+  (TREN.estaciones||[]).forEach(e=>{
+    if(!inComuna(e.lat,e.lon)) return;
+    L.circle([e.lat,e.lon],{radius:TREN.radio_cobertura_m||800,weight:1,color:"#e2e8f0",opacity:.35,fill:false,dashArray:"3 4",interactive:false}).addTo(coverLayer);
+    L.circleMarker([e.lat,e.lon],{renderer:coverCanvas,radius:5.5,weight:2,color:"#0f172a",fillColor:"#f8fafc",fillOpacity:1})
+      .bindTooltip(`<b>Estación ${e.nombre}</b> · ${e.sistema} (${(e.lineas||[]).join(", ")})<br>${_of(e.sistema)}`,{direction:"top"}).addTo(coverLayer);
+  });
 }
 function setCoverLegend(mode){
   if(coverLegend){ lmap.removeControl(coverLegend); coverLegend=null; }
@@ -2787,6 +2820,7 @@ function setCoverLegend(mode){
   const txt = (mode==="cover" && state.coverSub==="din") ? [`Cobertura dinámica · ${periodoLbl(state.periodo)}`,GYR,`<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>% del tiempo cubierto por algún bus (modelo cápsula 2 min + 300 m) · cambia con el período</span>`]
     : (mode==="cover" && state.coverSub==="od") ? [`Cobertura oferta/demanda · ${periodoLbl(state.periodo)}`,GYR,`<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>capacidad ÷ viajes generados · 100% = zona residencial mejor cubierta (las mejor conectadas), no el centro · reparto por demanda</span>`]
     : (mode==="cover" && state.linea!=="TODAS") ? [`NSE ${HOGL()} cubiertos · Línea ${state.linea}`,`<span class="grad" style="background:linear-gradient(90deg,#fb923c 33%,#94a3b8 33% 66%,#2dd4bf 66%)"></span>`,"<span class='lbls'><i>bajo</i><i>medio</i><i>alto</i></span><span class='par'>${nseFuenteLbl()} — solo manzanas cubiertas a ≤300 m</span>"]
+    : (mode==="cover" && state.coverSub==="tp") ? ["Cobertura bus + tren",GYR,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>% de la manzana a ≤300 m de un recorrido de bus o ≤800 m de una estación de tren · ● estación</span>"]
     : mode==="cover" ? ["Cobertura estática (≤300 m de la red)",GYR,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>% de la manzana dentro del área de influencia 300 m de los recorridos</span>"]
     : mode==="trans" ? ["Transbordo: viajes-trabajo con UNA línea (Censo 2024)",GYR,"<span class='lbls'><i>0%</i><i>50%</i><i>100%</i></span><span class='par'>verde = llega directo con una línea · rojo = exige transbordo o es inalcanzable</span>"]
     : mode==="wait" ? [`Espera al próximo bus · ${periodoLbl(state.periodo)} (min)`,RYG,"<span class='lbls'><i>0</i><i>3</i><i>6+</i></span><span class='par'>manzana = espera efectiva al próximo bus (con apelotonamiento) · ● paradero = espera ahí (hover)</span>"]
@@ -2898,7 +2932,8 @@ function renderMapa(){
     const b=$("live-count"), R=(COB&&COB.resumen)||{};
     const M=state.mapMode;
     const coverTit = state.coverSub==="din" ? `Cobertura dinámica · ${periodoLbl(state.periodo)}`
-      : state.coverSub==="od" ? `Cobertura oferta/demanda · ${periodoLbl(state.periodo)}` : "Cobertura estática";
+      : state.coverSub==="od" ? `Cobertura oferta/demanda · ${periodoLbl(state.periodo)}`
+      : state.coverSub==="tp" ? "Cobertura bus + tren" : "Cobertura estática";
     const titulo = {cover:coverTit,trans:"Transbordo",wait:`Espera al próximo bus · ${periodoLbl(state.periodo)}`,
       conges:`Velocidad efectiva por arco · ${periodoLbl(state.periodo)}`, bunch:`Apelotonamiento (bunching) · ${periodoLbl(state.periodo)}`, det:"Congestión y terminales",
       salud:"Accesibilidad a salud en transporte",edu:"Accesibilidad a educación en transporte",nse:`Nivel socioeconómico (${nseUnidadLbl()})`}[M];
@@ -2918,6 +2953,8 @@ function renderMapa(){
           ? `${dinp&&dinp.pct_hog_ge_umbral!=null?dinp.pct_hog_ge_umbral:"—"}% de los ${HOGL()} con cobertura dinámica ≥50% del tiempo en ${periodoLbl(state.periodo)} · media P_total ${dinp&&dinp.media_p_total!=null?(dinp.media_p_total*100).toFixed(1)+"%":"—"}`
           : state.coverSub==="od"
           ? `oferta/demanda en ${periodoLbl(state.periodo)} · 100% = zona residencial mejor cubierta (no el centro atractor) · rojo = déficit relativo`
+          : state.coverSub==="tp"
+          ? `${R.cob_tp.pct_hogares_cubiertos??"—"}% de los ${HOGL()} a ≤300 m de un bus o ≤800 m de una estación de tren · sólo bus: ${_ce.pct??"—"}% · a ≤800 m del tren: ${(R.cob_tren&&R.cob_tren.pct_hogares_cubiertos)??"—"}%`
           : `${_ce.pct??"—"}% de los ${HOGL()} a ≤300 m de la red (buffer sobre el recorrido oficial)${_ce.derivado?" · calculado desde las manzanas":""}`;
       const badgeSys = {cover: coverBadge,
         trans:`${(R.lab&&R.lab.dir)??"—"}% de los viajes-trabajo se hacen con UNA línea · ${(R.lab&&R.lab.tr)??"—"}% exige transbordo · ${(R.lab&&R.lab.no)??"—"}% inalcanzable (Censo 2024)`,
@@ -3189,6 +3226,10 @@ function renderNarrative(){
     txt=`<b>Cobertura dinámica</b>: ¿qué tan seguido pasa un bus cerca de mí? Modelo: cada bus cubre una <b>cápsula de 2 min + 300 m</b> al pasar por su trazado, así que <code>frac = min(1, f/30)</code> donde <code>f</code> es la frecuencia observada en bus/h. Por manzana combina todas las líneas que la cubren (P_total = 1 − Π(1−frac_i)). En <b>${periodoLbl(per)}</b>: verde = el bus pasa casi continuamente; rojo = pasa raramente. ${v!=null?`Media en ${amb}: <b>${(v*100).toFixed(0)}%</b> del tiempo. `:""}Compara <b>Punta AM con Noche</b>: aunque el trazado exista, de noche la frecuencia cae y la cobertura efectiva se desploma.`;
   } else if(M==="cover" && state.coverSub==="od"){
     txt=`<b>Cobertura oferta/demanda</b>: contrasta la <b>capacidad ofrecida</b> con la <b>demanda de viajes-TP</b> que genera cada manzana (${HOGL()} × tasa de generación EOD por hora). Para no doble-contar la capacidad compartida del corredor, se <b>reparte por demanda</b>. Se muestra <b>relativo a una zona residencial bien cubierta</b> (las zonas mejor conectadas = 100%), <b>no</b> al centro de la ciudad — que por ser atractor concentra todas las líneas y distorsionaría la comparación de generación. En <b>${periodoLbl(per)}</b>: verde = bien servida frente a su demanda; rojo = oferta corta. Cruza con la Noche para ver dónde la demanda persiste pero la oferta cae.`;
+  } else if(M==="cover" && state.coverSub==="tp"){
+    const v=scopeWavg(p=>p.cob_tp), vb=scopeWavg(p=>p.cob_est);
+    const sis=(TREN&&TREN.sistemas||[]).map(x=>x.sistema).join(" y ")||"el tren";
+    txt=`<b>Cobertura bus + tren</b> suma a la red de buses la de <b>${sis}</b>: una manzana está cubierta si queda a <b>300 m de un recorrido de bus</b> o a <b>800 m de una estación</b> (la gente camina más para tomar un tren). ${v!=null?`En ${amb}, en promedio el <b>${v.toFixed(0)}%</b> de cada manzana está cubierto${vb!=null?` (sólo bus: ${vb.toFixed(0)}%)`:""}. `:""}Es cobertura geográfica: no considera con qué frecuencia pasa el tren. ${(TREN&&TREN.sistemas||[]).some(x=>!x.frecuencia)?"La frecuencia del Biotren no está publicada por EFE y se pidió por Transparencia.":""}`;
   } else if(M==="cover"){
     const v=scopeWavg(p=>p.cob_est);
     txt=`<b>Cobertura estática</b> mide qué parte del territorio construido queda dentro del <b>área de influencia de 300 m</b> de los recorridos (buffer sobre el trazado oficial). Verde = la manzana está cubierta por la red; rojo = fuera del alcance peatonal de cualquier recorrido. ${v!=null?`En ${amb}, en promedio el <b>${v.toFixed(0)}%</b> de cada manzana está cubierto. `:""}Es la cobertura geográfica pura: aún no considera con qué frecuencia pasan los buses (eso es la cobertura dinámica – oferta).`;
@@ -3249,7 +3290,9 @@ function renderRanking(){
   let rows=[];
   if(cat.src==="rank"){
     const R=(RANK&&RANK.lineas)||{};
-    rows=Object.keys(R).map(L=>({id:L,nm:empresaDe(L),v:R[L][cat.metric]})).filter(r=>r.v!=null);
+    rows=Object.keys(R).map(L=>({id:L,nm:empresaDe(L),v:R[L][cat.metric],
+      vr:(cat.metric==="exc100"&&R[L].excesos>0&&R[L].excesos_via_rapida)?Math.round(100*R[L].excesos_via_rapida/R[L].excesos):0,
+      vias:R[L].vias_rapidas||[]})).filter(r=>r.v!=null);
   } else {
     const C=(typeof CUMP!=="undefined"&&CUMP&&CUMP.lineas)||{};
     rows=Object.keys(C).map(L=>({id:L,nm:empresaDe(L),v:C[L].cumpl&&C[L].cumpl.L})).filter(r=>r.v!=null);
@@ -3267,11 +3310,11 @@ function renderRanking(){
       <span class="rk">${i+1}</span>
       <span style="min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b style="font-family:var(--mono)">${r.id}</b> ${r.nm}</span>
       <span class="bar"><i style="width:${bw}%;background:${col}"></i></span>
-      <span class="val" style="color:${col}">${cat.fmt(r.v)}<span style="color:var(--muted);font-size:10px;margin-left:2px">${cat.unit}</span></span></div>`;
+      <span class="val" style="color:${col}">${cat.fmt(r.v)}<span style="color:var(--muted);font-size:10px;margin-left:2px">${cat.unit}</span>${r.vr?`<span title="De sus excesos, el ${r.vr} % ocurre en vías con límite señalizado sobre 80 km/h${r.vias.length?": "+r.vias.join(", "):""}" style="display:block;color:var(--muted);font-size:10px;font-weight:400">${r.vr} % en vía rápida</span>`:""}</span></div>`;
   }).join("");
   box.querySelectorAll(".rank-row").forEach(el=>el.onclick=()=>{state.linea=el.dataset.l;render();});
   const el=$("rank-narr");
-  if(el) el.innerHTML = `Líneas ordenadas por <b>${cat.lab.toLowerCase()}</b> (${cat.desc}) en ${state.comuna==="TODAS"?"el sistema":state.comuna}. Excesos y reparto de flota: base granular por bus (mar-2026, metodología <code>vel>80 &amp; vel_ok</code> · Gini de km/bus); frecuencia: despachos observados/programados GTFS. Clic en una línea para abrirla.`;
+  if(el) el.innerHTML = `Líneas ordenadas por <b>${cat.lab.toLowerCase()}</b> (${cat.desc}) en ${state.comuna==="TODAS"?"el sistema":state.comuna}. Excesos y reparto de flota: base granular por bus (metodología <code>vel>80 &amp; vel_ok</code> · Gini de km/bus); «en vía rápida» = parte de los excesos que ocurre en vías con límite señalizado sobre 80 km/h (autopistas), donde esa velocidad puede estar permitida; frecuencia: despachos observados/programados GTFS. Clic en una línea para abrirla.`;
 }
 
 // categorías del ranking de líneas (excesos normalizados · frecuencia · trabajo en equipo)
@@ -3815,7 +3858,9 @@ function renderEvolucion(){
     // se gatean por el dato de las manzanas, y la cobertura llega async: el selector se dibuja al
     // arrancar, cuando COB todavía es null, y sin este re-dibujo el modo NSE nunca aparecía aunque
     // `cobTiene('nse')` diera true (medido en Antofagasta: 3.260/3.260 manzanas con NSE).
-    J("cobertura.json").then(d=>{ COB=d; buildMapModes(); renderNseGap(); if(state.mapMode!=="live") renderMapa();
+    J("cobertura.json").then(d=>{ COB=d; if(_hayTren() && state.coverSub==="est"){ state.coverSub="tp"; buildCoverSub(); }
+      if(_hayTren()) J("tren.json").then(t=>{ TREN=t; if(state.mapMode==="cover") renderMapa(); }).catch(()=>{});
+      buildMapModes(); renderNseGap(); if(state.mapMode!=="live") renderMapa();
       if(LIVE && state.vista==="normal" && state.linea==="TODAS" && state.comuna==="TODAS") renderLiveExtras();
     }).catch(()=>{});
     J("ranking_lineas.json").then(d=>{ RANK=d; if(state.vista==="normal"&&state.linea==="TODAS") renderRanking(); }).catch(()=>{});
